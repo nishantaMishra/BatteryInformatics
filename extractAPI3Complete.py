@@ -44,7 +44,11 @@ with MPRester("gY51VNDnB45T6O32WEq1RPnGA5wqJNOU") as mpr: #Refer, https://github
                                                    "adj_pairs",
                                                    "entries_composition_summary",
                                                    "electrode_object",
-                                                   "warnings"])
+                                                   "warnings"],
+                                            #energy_grav=(0, 2),           These are different filters
+                                            #average_voltage=(0.5, 1.6)    uncomment them for filtered   
+                                            #elements=["Na", "Li", "Co"]   search
+                                            )
 
 
 # Creating a list of dictionaries to store the data
