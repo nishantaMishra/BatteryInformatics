@@ -8,7 +8,7 @@
 import pandas as pd
 from mp_api.client import MPRester
 
-with MPRester("gY51VNDnB45T6O32WEq1RPnGA5wqJNOU") as mpr: #Refer, https://github.com/materialsproject/api/blob/main/mp_api/client/routes/materials/electrodes.py
+with MPRester("API_KEY") as mpr: #Refer, https://github.com/materialsproject/api/blob/main/mp_api/client/routes/materials/electrodes.py
     docs = mpr.insertion_electrodes.search(fields=["battery_id", 
                                                    "material_ids",
                                                    "average_voltage",
