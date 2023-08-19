@@ -6,3 +6,4 @@ This script will extract the data for the provided material IDs and store it as 
 ### extractCIF2.py
 For long dataset.
 This script reads Material IDs from a specified column of a csv file and saves it as csv file.
+

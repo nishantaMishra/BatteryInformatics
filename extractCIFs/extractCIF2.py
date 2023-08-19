@@ -7,25 +7,20 @@ from pymatgen.ext.matproj import MPRester
 api_key = 'API_KEY'
 
 # Read the CSV file with the 'Charge IDs' column
-csv_file_path = 'final_combined_data3.csv'  # Replace with your CSV file path
+csv_file_path = 'datafile.csv'  # Replace with your CSV file/ file path
 data = pd.read_csv(csv_file_path)
 
-# Extract Material IDs from the 'Charge IDs' column
-material_ids = data['Charge ID'].tolist()
+# specifying column name 'Material ID' for reading material Ids
+material_ids = data['Material ID'].tolist()
 
-# Initialize the MPRester with your API key
 mpr = MPRester(api_key)
 
-# Loop through the Material IDs and retrieve structures
 for material_id in material_ids:
     try:
-        # Get the structure using the Material ID
         structure = mpr.get_structure_by_material_id(material_id)
+        cif_filename = f'{material_id.replace("mp-", "")}.cif' # Removing 'mp-' from the name(did this due to my preferences)
         
-        # Remove 'mp-' from the name
-        cif_filename = f'{material_id.replace("mp-", "")}.cif'
-        
-        # Save the structure as a CIF file
+        # Save the structure as a CIF file using to
         structure.to(filename=cif_filename, fmt='cif')
         print(f'CIF file saved for {material_id}')
     except Exception as e:
