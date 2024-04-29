@@ -1,0 +1,41 @@
+#Input file for defect formation energy calculations
+#So far, I only consider defects in mono-atomic or binary crystals.
+#Defects could be impurity, mono- or di-vacancy, and their complexes
+
+&VBM        #(eV)
+6.9696
+
+&band_gap        #with respect to the VBM (eV)
+5.0
+
+&Host_type
+Al N
+
+&Vacancies  #For example, for divacancy in AlN, put 'Al N'
+N
+
+&Impurities
+
+&Chemical_potentials #(eV)
+Al  -99.7202664
+N   -273.5905338
+
+&Host_supercell_energy #(Ry)
+-6585.061221
+
+&Charge_state_range  #two integer numbers // make sure you have a right number of alignment term
+-2 2
+
+&Defective_supercell_energy # charge_state(q) and energy (Ry) 
+-2  -6563.150785
+-1  -6563.955569
+0   -6564.730914
+1   -6565.492659
+2   -6566.044454
+
+&Correction_terms #(eV), for each charge state (e.g. -2 to 2): short-range potential energy, and (E_iso - E_periodic)
+-0.016  0.532248
+-0.014  0.133062
+0   0
+-0.013  0.133062
+-0.023  0.532248
