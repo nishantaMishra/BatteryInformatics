@@ -6,6 +6,7 @@ Input files should have a specific structure. There must be a column 'Formula' c
 
 ## How to use ?
 **Step#1**
+
 Edit the `elementsCommaEncoding` list of tuples in [code](elementsEncoding.py); in order the second value contains the value that you would like to encode.
 
 For example,
@@ -24,6 +25,7 @@ For encoding something arbitrary, for instance to encode presence of an element 
 elementsCommaEncoding = [('H', 1312), ('He', 2372), ('Li', 520.3), ('Be', 899.5), ('B', 800.7), ... ]
 ```
 **Step#2**
+
 Specify the path of input file (here, data1.csv) and run the program by 
 
 ```bash
