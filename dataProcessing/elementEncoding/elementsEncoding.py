@@ -18,9 +18,7 @@ elementsCommaEncoding = [('H', 1312), ('He', 2372), ('Li', 520.3), ('Be', 899.5)
                        ('Lu', 523.6), ('Hf', 680), ('Ta', 761), ('W', 770), ('Re', 760),
                        ('Os', 840), ('Ir', 880)]
 
-# 
 df = pd.read_csv('data1.csv')
-
 
 dfs_to_concat = []
 for index, row in df.iterrows():
@@ -45,5 +43,5 @@ for index, row in df.iterrows():
 
 
 final_result_df = pd.concat(dfs_to_concat, ignore_index=True)
-final_result_df.to_csv('element_encoding_values.csv', index=False)
+final_result_df.to_csv('element_encoded_values.csv', index=False)
 
