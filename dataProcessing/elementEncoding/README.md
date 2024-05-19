@@ -5,9 +5,12 @@ For embedding chemical formulae in data frame.
 Input files should have a specific structure. There must be a column 'Formula' containing chemical formula names and rest of the columns have their title as different element name. 
 
 ## How to use ?
+
+The code contains a list of tuples named `elementsCommaEncoding` which has to be edited appropriately to fit the specific use case of the user.
+
 **Step#1**
 
-Edit the `elementsCommaEncoding` list of tuples in [code](elementsEncoding.py); in order the second value contains the value that you would like to encode.
+Edit the `elementsCommaEncoding` list of tuples in [code](elementsEncoding.py); in order, the second value contains the value that you would like to encode.
 
 For example,
 - For separating elements from the formula and writing them in separate columns edit elementsCommaEnergy as following
