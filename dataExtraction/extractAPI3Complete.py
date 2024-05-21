@@ -45,9 +45,12 @@ with MPRester("API_KEY") as mpr: #Refer, https://github.com/materialsproject/api
                                                    "entries_composition_summary",
                                                    "electrode_object",
                                                    "warnings"],
-                                            #energy_grav=(0, 2),           These are different filters
-                                            #average_voltage=(0.5, 1.6)    uncomment them for filtered   
-                                            #elements=["Na", "Li", "Co"]   search
+                             """Uncomment and edit the following filters for filtered
+                                            search.
+                                            """
+                                            #energy_grav=(0, 2),   # extract compounds those have Gravimetric Energy between 0 and 2 units.  
+                                            #average_voltage=(0.5, 1.6)  #extract only the compounds with their AV between 0.5 and 1.6 Volts
+                                            #elements=["Na", "Li", "Co"]   # extract compounds only if all of the listed elements are present in it
                                             )
 
 
