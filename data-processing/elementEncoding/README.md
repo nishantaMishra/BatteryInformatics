@@ -2,6 +2,7 @@
 
 For embedding chemical formulae in data frame. This code can be used for embedding compositional information to the data frame or extracting the elements from chemical formula and writing them in separate column. 
 
+
 Input files should have a specific structure. There must be a column 'Formula' containing chemical formula names and rest of the columns have their title as different element name. _data1.csv_ shows the format of input file.
 
 ## How to use ?
