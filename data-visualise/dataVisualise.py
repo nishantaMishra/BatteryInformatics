@@ -1,9 +1,5 @@
 """
-This will refresh the data. Includes curve fitting with scatter plot
 Working as intended on Friday 30 August 2024 07:28:37 PM IST
-
-Contains on extra feature in correlation matrix function to NOT
-label correlation values if number of features is more that 45. 
 """
 
 import pandas as pd
@@ -233,7 +229,7 @@ def draw_correlation_matrix(df, columns_range, variance_threshold=1e-10):
             print(f"{colored('Caution!','yellow' )} No numeric columns found in the selected range.")
             return
         
-        # Remove columns with variance below the threshold
+        # Remove columns with variance below the threshold as they will appear as blank strips
         low_variance_cols = numeric_df.var() <= variance_threshold
         filtered_df = numeric_df.loc[:, ~low_variance_cols]
         
@@ -245,7 +241,7 @@ def draw_correlation_matrix(df, columns_range, variance_threshold=1e-10):
         correlation_matrix = filtered_df.corr(numeric_only=True)
         
         # Determine whether to annotate cells based on the number of columns
-        annot = correlation_matrix.shape[1] <= 45
+        annot = correlation_matrix.shape[1] <= 45 # not annotating values of correlation coefficient if number of features exceeds this number.
         
         # Plot the heatmap
         plt.figure(figsize=(10, 8))
@@ -258,9 +254,9 @@ def draw_correlation_matrix(df, columns_range, variance_threshold=1e-10):
         plt.draw()  # Update the plot
         
         # Get the longest label length on the x-axis
+        # Adjust the plot margins if labels are long
         max_label_length = max([len(str(label)) for label in ax.get_xticklabels()])
         
-        # Adjust the plot margins if labels are long
         if max_label_length > 8:
             plt.subplots_adjust(bottom=0.25, left=0.25)
         
@@ -277,9 +273,6 @@ def draw_correlation_matrix(df, columns_range, variance_threshold=1e-10):
 def parse_columns_range(columns_range):
     start_col, end_col = map(lambda x: int(x) if x.isnumeric() else col_alpha_to_num(x), columns_range.split(','))
     return start_col, end_col
-
-
-
 
 ##############
 # Convert alphabetical notation to column number
