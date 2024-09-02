@@ -19,7 +19,6 @@ from sklearn.linear_model import LinearRegression
 from sklearn.pipeline import make_pipeline
 
 
-
 # Load CSV file into a DataFrame
 def load_data(csv_file):
     try:
@@ -209,7 +208,6 @@ def draw_pair_plot(df, columns):
         print(f"{colored('Caution!','yellow' )} Error in creating pair plot: {ve}")
 
 ######################
-
 def draw_correlation_matrix(df, columns_range, variance_threshold=1e-10):
     try:
         start_col, end_col = parse_columns_range(columns_range)
@@ -249,9 +247,27 @@ def draw_correlation_matrix(df, columns_range, variance_threshold=1e-10):
         # Determine whether to annotate cells based on the number of columns
         annot = correlation_matrix.shape[1] <= 45
         
+        # Plot the heatmap
         plt.figure(figsize=(10, 8))
-        sns.heatmap(correlation_matrix, annot=annot, cmap='coolwarm', fmt='.2f')
+        ax = sns.heatmap(correlation_matrix, annot=annot, cmap='coolwarm', fmt='.2f')
+
+        # Automatically adjust the plot layout to make sure labels are visible
         plt.title("Correlation Matrix (Heatmap)")
+        
+        plt.tight_layout()  # Makes an initial adjustment
+        plt.draw()  # Update the plot
+        
+        # Get the longest label length on the x-axis
+        max_label_length = max([len(str(label)) for label in ax.get_xticklabels()])
+        
+        # Adjust the plot margins if labels are long
+        if max_label_length > 8:
+            plt.subplots_adjust(bottom=0.25, left=0.25)
+        
+        # Tilt x-axis labels if they are longer than 12 characters
+        if max_label_length > 12:
+            ax.set_xticklabels(ax.get_xticklabels(), rotation=45, ha='right')
+
         plt.show()
 
     except ValueError as ve:
@@ -262,7 +278,10 @@ def parse_columns_range(columns_range):
     start_col, end_col = map(lambda x: int(x) if x.isnumeric() else col_alpha_to_num(x), columns_range.split(','))
     return start_col, end_col
 
-####
+
+
+
+##############
 # Convert alphabetical notation to column number
 def col_alpha_to_num(alpha):
     result = 0
