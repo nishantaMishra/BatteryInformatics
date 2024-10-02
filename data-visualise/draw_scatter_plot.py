@@ -36,10 +36,8 @@ def draw_scatter_plot(df, x_col, y_cols):
             x_curve = np.linspace(min(x_values), max(x_values), 100)
             y_curve = model.predict(x_curve.reshape(-1, 1))
 
-            # Plot the curve
             plt.plot(x_curve, y_curve, label=f'Curve Fit (Degree {degree})', linestyle='--')
 
-            # Extract polynomial coefficients
             lin_reg = model.named_steps['linearregression']
             poly_features = model.named_steps['polynomialfeatures']
             coeffs = lin_reg.coef_.flatten()
