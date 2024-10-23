@@ -16,6 +16,6 @@ python3 main.py
 
 Installation via PyPI
 ```bash
-python3 -m pip install --upgrade termcolor
+pip install pandas
 ```
 
