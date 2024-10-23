@@ -9,8 +9,9 @@ python3 main.py
 ```
 
 ## Requirements
-[pandas](https://pypi.org/project/pandas/)
-[termcolor](https://pypi.org/project/termcolor/)
+
+- [pandas](https://pypi.org/project/pandas/)
+- [termcolor](https://pypi.org/project/termcolor/)
 
 
 Installation via PyPI
