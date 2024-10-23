@@ -12,11 +12,15 @@ python3 main.py
 
 - [pandas](https://pypi.org/project/pandas/)
 - [termcolor](https://pypi.org/project/termcolor/)
+- [scikit-learn](https://pypi.org/project/sklearn/)
+- [seaborn](https://pypi.org/project/seaborn/)
 
 
 Installation via PyPI
 ```bash
 python3 -m pip install --upgrade termcolor; 
-pip install pandas
+pip install pandas;
+pip install scikit-learn;
+pip install seaborn
 ```
 
