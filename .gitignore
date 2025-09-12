@@ -1,0 +1,57 @@
+# DOS-plots directory - ignore large data files
+DOS-plots/*.dat
+DOS-plots/*.txt
+DOS-plots/*.out
+DOS-plots/*.log
+DOS-plots/*.xml
+DOS-plots/*.hdf5
+DOS-plots/*.h5
+DOS-plots/*.nc
+DOS-plots/*.npz
+DOS-plots/*.pkl
+DOS-plots/*.pickle
+
+# Large image files in DOS-plots
+DOS-plots/*.png
+DOS-plots/*.jpg
+DOS-plots/*.jpeg
+DOS-plots/*.pdf
+DOS-plots/*.eps
+DOS-plots/*.svg
+
+# VASP output files (commonly large in DFT calculations)
+DOS-plots/OUTCAR*
+DOS-plots/WAVECAR*
+DOS-plots/CHGCAR*
+DOS-plots/CHG*
+DOS-plots/DOSCAR*
+DOS-plots/vasprun.xml*
+
+# Python cache files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Jupyter notebook checkpoints
+.ipynb_checkpoints/
+
+# Large data files (general)
+*.dat
+*.bin
+*.dump
+
+# Temporary files
+*.tmp
+*.temp
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
