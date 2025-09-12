@@ -11,6 +11,11 @@ DOS-plots/*.npz
 DOS-plots/*.pkl
 DOS-plots/*.pickle
 
+# Specific large files causing GitHub issues
+DOS-plots/DOS-hd5/*.h5
+DOS-plots/PDOS/*/PROCAR
+DOS-plots/PDOS/VNi/PROCAR
+
 # Large image files in DOS-plots
 DOS-plots/*.png
 DOS-plots/*.jpg
