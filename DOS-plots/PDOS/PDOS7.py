@@ -1,6 +1,5 @@
 # Working as intended on Sun Aug 17 06:43:49 PM EDT 2025
 # The program expects vaspkit installed in the system.
-# This doesn't sort the elements in the plot legend. 
 
 #------------ Dependency check ----------
 import importlib
@@ -22,7 +21,7 @@ def install_dependency(dependency):
         print(f"Failed to install {dependency}. Please install it manually.")
 
 # Auto-install required libraries
-for pkg in ["matplotlib", "glob", "readline", "subprocess"]:
+for pkg in ["matplotlib", "numpy", "pyyaml"]:
     check_dependency(pkg)
 
 #-------- Imports -----------
@@ -36,6 +35,20 @@ import matplotlib.font_manager as fm
 
 # Add this near the top after imports
 plt.rcParams['font.family'] = ['Noto Sans Devanagari', 'DejaVu Sans']
+
+# Import color manager
+try:
+    import sys
+    sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+    from color_manager import apply_color_scheme, get_available_schemes, list_schemes_info
+except ImportError:
+    print("Warning: Could not import color manager. Color schemes may not work properly.")
+    def apply_color_scheme(elements, plotting_info, scheme_name):
+        return {}
+    def get_available_schemes():
+        return ['vesta']
+    def list_schemes_info():
+        print("Color scheme information not available.")
 
 # Function to enable tab-completion for file paths (tested only in linux)
 def input_with_completion(prompt):
@@ -127,7 +140,7 @@ def read_tdos_file(location):
         print(f"Warning: Could not read TDOS.dat: {e}")
         return None, None, None
 
-def plot_pdos(pdos_files, plotting_info, title, spin_filter=None, fill=False, location=None, fill_colors=None, cutoff=None):
+def plot_pdos(pdos_files, plotting_info, title, spin_filter=None, fill=False, location=None, fill_colors=None, cutoff=None, show_grid=False, show_ylabel=False):
     colors = plt.cm.tab10.colors
     linestyles = ['-', '--', '-.', ':']
     element_color_map = {}
@@ -225,7 +238,10 @@ def plot_pdos(pdos_files, plotting_info, title, spin_filter=None, fill=False, lo
     plt.ylabel("Density of States")
     plt.title(title)
     plt.legend()
-    plt.grid(True, alpha=0.3)
+    if show_grid:
+        plt.grid(True, alpha=0.3)
+    if not show_ylabel:
+        plt.gca().set_yticks([])
     plt.show()
 
 def parse_color_input(color_str):
@@ -298,18 +314,20 @@ def show_help():
    • Individual: s, py, pz, px, dxy, dyz, dz2, dxz, dx2
    • Combined:  p (py+pz+px), d (all d orbitals), tot (total)
 
-🌐 GLOBAL OPTIONS:
+📋 ALL AVAILABLE ARGUMENTS:
+
+🌐 GLOBAL PLOTTING OPTIONS:
    
    --all / all:
    • Plots all elements with s, p, d orbitals automatically
    • Example: --all fill
-             all --colour UP
+             all --colour vesta UP
    
-   --cutoff / cutoff=:
-   • Filters out curves with maximum y-value below threshold
-   • Formats: --cutoff 0.1  OR  cutoff=0.1
-   • Example: Ti s p d, O p tot --cutoff 0.05
-             --all cutoff=0.1 fill
+   tot:
+   • Plots Total Density of States (TDOS) when used alone
+   • Example: tot
+             tot red fill
+             --all, tot --colour user
 
 🧲 SPIN FILTERING:
    Add spin filter anywhere in the command:
@@ -321,57 +339,118 @@ def show_help():
             Ti s p d, O p tot --DOWN
             --all --UP --cutoff 0.1
 
-🎨 COLOR CUSTOMIZATION:
+🎨 COLOR SCHEMES & CUSTOMIZATION:
    
-   Method 1 - Inline Colors:
+   Built-in Color Schemes:
+   • --colour vesta / -c vesta    : VESTA 3 crystal visualization colors
+   • --colour jmol / -c jmol      : Jmol molecular visualization colors
+   • --colour user / -c user      : Your customizable color scheme
+   • --colour custom / -c custom  : Same as user scheme
+   • --colour cpk / -c cpk        : Classic CPK chemistry colors
+   • --colour mp / -c mp          : Materials Project database colors
+   • --colour materials / -c materials : Same as Materials Project
+   
+   Interactive Color Selection:
+   • --colour / colour            : Start interactive color picker
+   • --color / color / -c         : Same as above
+   
+   Inline Colors (per element):
    • Add color after orbitals: Ti s p d red, O p tot blue
    • Available colors: red, blue, green, orange, purple, brown, pink, 
      gray, olive, cyan, magenta, yellow
    • Hex colors: Ti s p d #FF5733, O p tot #33C3FF
    
-   Method 2 - Interactive Selection:
-   • Add --colour or colour flag: Ti s p d, O p tot --colour
-   • Program will prompt for color selection interactively
+   Color Priority (highest to lowest):
+   1. Inline colors (Ti s p d red)
+   2. Interactive selection (--colour)  
+   3. Color schemes (--colour vesta)
+   4. Default matplotlib colors
 
-🌊 FILL OPTIONS:
-   Add fill option anywhere in the command:
-   • fill / --fill         : Fill area under curves
+🌊 FILL & VISUAL OPTIONS:
+   
+   Fill Options:
+   • fill / --fill         : Fill area under curves with transparency
    • gridfill / --gridfill : Same as fill
    
-   Examples: Ti s p d, O p tot fill
-            --all fill --colour
-
-📊 TDOS PLOTTING:
-   • Use 'tot' alone to plot Total Density of States
-   • Examples: tot
-              tot red fill
-              tot --colour --UP
-              --all, tot --cutoff 0.05
-
-💡 COMPLETE EXAMPLES:
+   Grid Options:
+   • --grid / grid         : Show grid lines on plot (disabled by default)
    
-   Basic PDOS:           Ti s p d, O p tot
-   With colors:          Ti s p d blue, O p tot red fill  
-   Spin-filtered:        Ti s p d, O p tot UP fill
-   Interactive colors:   Ti s p d, O p tot fill --colour
-   All elements:         --all fill --colour
-   With cutoff:          --all --cutoff 0.1 UP
-   TDOS only:           tot
-   TDOS with options:   tot green --UP fill
-   Mixed plotting:      Ti d, O p, tot --colour fill --cutoff 0.05
+   Examples: Ti s p d, O p tot fill
+            --all fill --colour vesta --grid
+            tot --colour user fill
+
+📊 DATA FILTERING:
+   
+   Cutoff Filtering:
+   • --cutoff X / cutoff=X : Hide curves with max absolute value below X
+   • Useful for removing negligible contributions
+   • Formats: --cutoff 0.1  OR  cutoff=0.1
+   
+   Examples: Ti s p d, O p tot --cutoff 0.05
+            --all cutoff=0.1 fill --colour jmol
+            tot --cutoff 0.02 --UP
+
+🎯 COMPLETE ARGUMENT COMBINATIONS:
+
+   Basic PDOS:           
+   Ti s p d, O p tot
+
+   With specific colors:          
+   Ti s p d blue, O p tot red fill  
+
+   Using color schemes:
+   --all --colour vesta fill --grid
+   Ti d, O p --colour jmol UP --cutoff 0.1
+
+   Spin-filtered with options:        
+   Ti s p d, O p tot UP fill --colour user --grid
+
+   Interactive with all options:   
+   --all fill --colour --cutoff 0.05 DOWN --grid
+
+   TDOS plotting:           
+   tot
+   tot green --UP fill --grid
+   --all, tot --colour cpk fill --cutoff 0.02
+
+   Mixed comprehensive example:      
+   Ti d red, O p blue, tot --colour vesta fill UP --grid --cutoff 0.03
+
+🔧 ARGUMENT SYNTAX RULES:
+
+   • Arguments can appear in any order
+   • Multiple formats accepted: --UP, UP, --colour, colour, -c
+   • Commas separate different elements: Ti s p d, O p tot
+   • Spaces separate orbitals within elements: Ti s p d
+   • Colors come after orbitals: Ti s p d red
+   • Global options apply to entire plot: --all fill --colour vesta
 
 ⚙️ SPECIAL COMMANDS:
    • '0'    : Change directory
    • 'help' : Show this help message
+   • Ctrl+D : Exit the program
+
+📖 COLOR CUSTOMIZATION GUIDE:
+   To customize the 'user' color scheme:
+   1. Edit: DOS-plots/PDOS/ElementColorSchemes.yaml
+   2. Find the 'User:' section
+   3. Modify RGB values: Element: [Red, Green, Blue] (0-255)
+   4. Save and use with: --colour user
+
+💡 PRO TIPS:
+   • Use --grid for better data reading
+   • Combine cutoff with --all to focus on significant contributions
+   • Save time with color schemes instead of manual color selection
+   • Test different spin filters (UP/DOWN) for magnetic materials
+   • Use fill for publication-quality plots
+   • Inline colors override scheme colors for specific elements
 
 📋 NOTES:
    • Files are auto-generated using vaspkit if missing
-   • Colors work with or without fill option
-   • Cutoff filters apply to maximum y-values of curves
-   • --all plots s, p, d orbitals for all available elements
-   • Multiple elements can have different colors
-   • Order matters: specify element, orbitals, then color
-   • Press Ctrl+D to exit the program
+   • All color schemes read from ElementColorSchemes.yaml
+   • Program supports both spin-polarized and non-magnetic calculations
+   • Multiple elements can have different individual colors
+   • Order matters for inline colors: specify element, orbitals, then color
 
 """)
 
@@ -387,7 +466,7 @@ def main():
             pdos_files = read_pdos_files(location)
             if not pdos_files:
                 generated = try_generate_pdos_dat_files(location)
-                if generated:
+                if (generated):
                     pdos_files = read_pdos_files(location)
 
             if not pdos_files:
@@ -417,11 +496,16 @@ def main():
                 use_interactive_colors = False
                 fill_colors = {}
                 cutoff = None
+                show_grid = False
                 tokens = plotting_input.split()
 
                 # Extract spin filter, fill option, --colour flag, --all, and cutoff
                 filtered_tokens = []
                 use_all_elements = False
+                use_interactive_colors = False
+                color_scheme = None
+                show_grid = False
+                show_ylabel = False  # Default: hide y-axis labels
                 i = 0
                 while i < len(tokens):
                     token = tokens[i]
@@ -429,10 +513,18 @@ def main():
                         spin_filter = 'DOWN' if token.lower() in ['dw', '--dw'] else token.upper().replace('--', '')
                     elif token.lower() in ['fill', 'gridfill', '--fill', '--gridfill']:
                         fill = True
-                    elif token.lower() in ['colour', '--colour', 'color', '--color']:
-                        use_interactive_colors = True
+                    elif token.lower() in ['colour', '--colour', 'color', '--color', '-c']:
+                        # Check if next token is a color scheme
+                        available_schemes = get_available_schemes()
+                        if i + 1 < len(tokens) and tokens[i + 1].lower() in available_schemes:
+                            color_scheme = tokens[i + 1].lower()
+                            i += 1  # Skip the scheme name
+                        else:
+                            use_interactive_colors = True
                     elif token.lower() in ['--all', 'all']:
                         use_all_elements = True
+                    elif token.lower() in ['--grid', 'grid']:
+                        show_grid = True
                     elif token.lower() == '--cutoff' and i + 1 < len(tokens):
                         try:
                             cutoff = float(tokens[i + 1])
@@ -444,6 +536,8 @@ def main():
                             cutoff = float(token.split('=')[1])
                         except ValueError:
                             print("Invalid cutoff value. Ignoring.")
+                    elif token.lower() in ['-y', '--ylabel']:
+                        show_ylabel = True
                     else:
                         filtered_tokens.append(token)
                     i += 1
@@ -498,9 +592,14 @@ def main():
                     interactive_colors = get_fill_colors(plotting_info.keys(), plotting_info)
                     # Merge with inline colors, giving priority to interactive selection
                     fill_colors.update(interactive_colors)
+                elif color_scheme:
+                    scheme_colors = apply_color_scheme(plotting_info.keys(), plotting_info, color_scheme)
+                    # Merge with inline colors, giving priority to inline colors
+                    scheme_colors.update(fill_colors)
+                    fill_colors = scheme_colors
 
                 # Pass fill_colors and cutoff to plot_pdos
-                plot_pdos(pdos_files, plotting_info, title, spin_filter, fill, location, fill_colors, cutoff)
+                plot_pdos(pdos_files, plotting_info, title, spin_filter, fill, location, fill_colors, cutoff, show_grid, show_ylabel)
 
             except Exception as e:
                 print(f"Error: {e}")
