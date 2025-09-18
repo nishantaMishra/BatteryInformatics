@@ -36,6 +36,63 @@ import matplotlib.font_manager as fm
 # Add this near the top after imports
 plt.rcParams['font.family'] = ['Noto Sans Devanagari', 'DejaVu Sans']
 
+# Bandgap detection functions adapted from TDOS5.py
+def is_zero(x, tol=1e-5):
+    return abs(x) < tol
+
+def detect_bandgap_exact(energy, tdos_up, tdos_down):
+    data = list(zip(energy, tdos_up, tdos_down))
+    data.sort()  # ensure sorted by energy ascending
+
+    min_e, min_up, min_down = data[0]
+    if not (is_zero(min_up) and is_zero(min_down)):
+        return None  # No bandgap detected
+
+    fermi_idx = np.argmin(np.abs(energy))
+
+    vbm = None
+    for i in range(fermi_idx, -1, -1):
+        if is_zero(tdos_up[i]) and is_zero(tdos_down[i]):
+            vbm = energy[i]
+        else:
+            break
+
+    cbm = None
+    for i in range(fermi_idx, len(energy)):
+        if is_zero(tdos_up[i]) and is_zero(tdos_down[i]):
+            cbm = energy[i]
+        else:
+            break
+
+    if vbm is None or cbm is None or cbm <= vbm:
+        return None
+
+    return vbm, cbm, cbm - vbm
+
+def analyze_tdos_bandgap(energy, tdos_up, tdos_down, symmetry_tol=0.01):
+    """Analyze TDOS for magnetic behavior and bandgap"""
+    print("\n----- TDOS Analysis Results -----")
+
+    max_dos = max(np.max(np.abs(tdos_up)), np.max(np.abs(tdos_down)), 1e-8)
+    sym_diff = np.mean(np.abs(tdos_up + tdos_down)) / max_dos
+    if sym_diff < symmetry_tol:
+        print("✅ Non-magnetic (TDOS-UP and DOWN are symmetric).")
+    else:
+        print("⚠️  Magnetic (TDOS-UP and DOWN differ noticeably).")
+
+    bandgap_info = detect_bandgap_exact(energy, tdos_up, tdos_down)
+
+    if bandgap_info:
+        vbm, cbm, width = bandgap_info
+        print(f"✅ Bandgap detected: {vbm:.3f} to {cbm:.3f} eV → Width: {width:.3f} eV")
+        print(f"   VBM (Valence Band Maximum): {vbm:.3f} eV")
+        print(f"   CBM (Conduction Band Minimum): {cbm:.3f} eV")
+    else:
+        print("⚠️  No bandgap detected - Material appears to be metallic.")
+
+    print("----------------------------------\n")
+    return bandgap_info
+
 # Import color manager
 try:
     import sys
@@ -152,6 +209,9 @@ def plot_pdos(pdos_files, plotting_info, title, spin_filter=None, fill=False, lo
     
     if plot_tdos_flag and location:
         tdos_energy, tdos_up, tdos_down = read_tdos_file(location)
+        # Perform bandgap analysis when TDOS is plotted
+        if tdos_energy is not None:
+            analyze_tdos_bandgap(tdos_energy, tdos_up, tdos_down)
 
     # Process elements in the order they appear in plotting_info
     for element in plotting_info.keys():
