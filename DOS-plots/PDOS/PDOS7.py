@@ -411,16 +411,18 @@ def show_help():
 
 🌐 GLOBAL PLOTTING OPTIONS:
    
-   --all / all:
-   • Plots all elements with s, p, d orbitals automatically
-   • Example: --all fill
-             all --colour vesta UP
+   all / all [orbitals]:
+   • Plots all elements with specified orbitals (default: s, p, d)
+   • Example: all
+             all p d
+             all s --fill -c vesta
+             all p UP --colour jmol
    
    tot:
    • Plots Total Density of States (TDOS) when used alone
    • Example: tot
              tot red fill
-             --all, tot --colour user
+             all p, tot --colour user
 
 🧲 SPIN FILTERING:
    Add spin filter anywhere in the command:
@@ -430,7 +432,7 @@ def show_help():
    
    Examples: UP Ti s p d, O p tot
             Ti s p d, O p tot --DOWN
-            --all --UP --cutoff 0.1
+            all p --UP --cutoff 0.1
 
 🎨 COLOR SCHEMES & CUSTOMIZATION:
    
@@ -469,7 +471,7 @@ def show_help():
    • --grid / grid         : Show grid lines on plot (disabled by default)
    
    Examples: Ti s p d, O p tot fill
-            --all fill --colour vesta --grid
+            all p d fill --colour vesta --grid
             tot --colour user fill
 
 📊 DATA FILTERING:
@@ -480,7 +482,7 @@ def show_help():
    • Formats: --cutoff 0.1  OR  cutoff=0.1
    
    Examples: Ti s p d, O p tot --cutoff 0.05
-            --all cutoff=0.1 fill --colour jmol
+            all p cutoff=0.1 fill --colour jmol
             tot --cutoff 0.02 --UP
 
 🎯 COMPLETE ARGUMENT COMBINATIONS:
@@ -492,19 +494,19 @@ def show_help():
    Ti s p d blue, O p tot red fill  
 
    Using color schemes:
-   --all --colour vesta fill --grid
-   Ti d, O p --colour jmol UP --cutoff 0.1
+   all --colour vesta fill --grid
+   all p d --colour jmol UP --cutoff 0.1
 
    Spin-filtered with options:        
    Ti s p d, O p tot UP fill --colour user --grid
 
    Interactive with all options:   
-   --all fill --colour --cutoff 0.05 DOWN --grid
+   all fill --colour --cutoff 0.05 DOWN --grid
 
    TDOS plotting:           
    tot
    tot green --UP fill --grid
-   --all, tot --colour cpk fill --cutoff 0.02
+   all p, tot --colour cpk fill --cutoff 0.02
 
    Mixed comprehensive example:      
    Ti d red, O p blue, tot --colour vesta fill UP --grid --cutoff 0.03
@@ -516,7 +518,7 @@ def show_help():
    • Commas separate different elements: Ti s p d, O p tot
    • Spaces separate orbitals within elements: Ti s p d
    • Colors come after orbitals: Ti s p d red
-   • Global options apply to entire plot: --all fill --colour vesta
+   • Global options apply to entire plot: all p d fill --colour vesta
 
 ⚙️ SPECIAL COMMANDS:
    • '0'    : Change directory
@@ -532,12 +534,13 @@ def show_help():
 
 💡 PRO TIPS:
    • Use --grid for better data reading
-   • Combine cutoff with --all to focus on significant contributions
+   • Combine cutoff with all to focus on significant contributions
    • Save time with color schemes instead of manual color selection
    • Test different spin filters (UP/DOWN) for magnetic materials
    • Use fill for publication-quality plots
    • Inline colors override scheme colors for specific elements
    • Order matters for inline colors: specify element, orbitals, then color
+   • Use 'all p d' to plot only p and d orbitals for all elements
 
 """)
 
@@ -586,9 +589,10 @@ def main():
                 show_grid = False
                 tokens = plotting_input.split()
 
-                # Extract spin filter, fill option, --colour flag, --all, and cutoff
+                # Extract spin filter, fill option, --colour flag, and cutoff
                 filtered_tokens = []
                 use_all_elements = False
+                all_orbitals = ['s', 'p', 'd']  # default orbitals for 'all'
                 use_interactive_colors = False
                 color_scheme = None
                 show_grid = False
@@ -608,8 +612,18 @@ def main():
                             i += 1  # Skip the scheme name
                         else:
                             use_interactive_colors = True
-                    elif token.lower() in ['--all', 'all']:
+                    elif token.lower() == 'all':
                         use_all_elements = True
+                        # Check if 'all' is followed by specific orbitals
+                        j = i + 1
+                        temp_orbitals = []
+                        valid_orbitals = ['s', 'p', 'd', 'py', 'pz', 'px', 'dxy', 'dyz', 'dz2', 'dxz', 'dx2', 'tot']
+                        while j < len(tokens) and tokens[j].lower() in valid_orbitals:
+                            temp_orbitals.append(tokens[j].lower())
+                            j += 1
+                        if temp_orbitals:
+                            all_orbitals = temp_orbitals
+                            i = j - 1  # Adjust index to skip processed orbital tokens
                     elif token.lower() in ['--grid', 'grid']:
                         show_grid = True
                     elif token.lower() == '--cutoff' and i + 1 < len(tokens):
@@ -631,37 +645,37 @@ def main():
 
                 plotting_input = ' '.join(filtered_tokens)
 
-                # Handle --all option
+                # Handle all option
                 if use_all_elements:
-                    # Plot all available elements with s, p, d orbitals
+                    # Plot all available elements with specified orbitals
                     plotting_info = {}
                     for element in pdos_files.keys():
-                        plotting_info[element] = ['s', 'p', 'd']
-                else:
-                    # Parse plotting info and inline colors
-                    for info in plotting_input.split(','):
-                        parts = info.strip().split()
-                        if parts:
-                            if len(parts) == 1 and parts[0] == 'tot':
-                                # Standalone 'tot' means plot TDOS
-                                plotting_info['tot'] = []
-                            else:
-                                element = parts[0]
-                                orbitals = []
-                                
-                                # Check if last part is a color
-                                color = None
-                                if len(parts) > 1:
-                                    potential_color = parse_color_input(parts[-1])
-                                    if potential_color:
-                                        color = potential_color
-                                        orbitals = parts[1:-1]  # Exclude color from orbitals
-                                    else:
-                                        orbitals = parts[1:]    # No color, all are orbitals
-                                
-                                plotting_info[element] = orbitals
-                                if color:
-                                    fill_colors[element] = color
+                        plotting_info[element] = all_orbitals
+
+                # Parse plotting info and inline colors
+                for info in plotting_input.split(','):
+                    parts = info.strip().split()
+                    if parts:
+                        if len(parts) == 1 and parts[0] == 'tot':
+                            # Standalone 'tot' means plot TDOS
+                            plotting_info['tot'] = []
+                        else:
+                            element = parts[0]
+                            orbitals = []
+                            
+                            # Check if last part is a color
+                            color = None
+                            if len(parts) > 1:
+                                potential_color = parse_color_input(parts[-1])
+                                if potential_color:
+                                    color = potential_color
+                                    orbitals = parts[1:-1]  # Exclude color from orbitals
+                                else:
+                                    orbitals = parts[1:]    # No color, all are orbitals
+                            
+                            plotting_info[element] = orbitals
+                            if color:
+                                fill_colors[element] = color
 
                 # Check if TDOS is requested and file exists
                 plot_tdos_requested = 'tot' in plotting_info and not plotting_info['tot']

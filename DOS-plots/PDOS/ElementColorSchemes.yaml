@@ -219,7 +219,7 @@ VESTA:
   Zn: [143, 143, 129]
   Zr: [0, 255, 0]
 User:  # Customizable color scheme - modify these colors as needed
-  H: [255, 255, 255]    # White
+  H: [255, 204, 204]    # Pinkish White
   He: [255, 192, 203]   # Pink
   Li: [255, 0, 255]     # Magenta
   Be: [0, 255, 0]       # Green
