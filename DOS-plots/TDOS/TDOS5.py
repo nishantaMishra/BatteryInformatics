@@ -28,54 +28,95 @@ def is_zero(x, tol=1e-5):
     return abs(x) < tol
 
 def detect_bandgap_exact(energy, tdos_up, tdos_down):
-    data = list(zip(energy, tdos_up, tdos_down))
-    data.sort()  # ensure sorted by energy ascending
+    # Deprecated legacy function retained for compatibility (not used now)
+    return None
 
-    min_e, min_up, min_down = data[0]
-    if not (is_zero(min_up) and is_zero(min_down)):
-        return None  # No bandgap detected
+# --- New advanced bandgap detection utilities ---
 
-    fermi_idx = np.argmin(np.abs(energy))
-
-    vbm = None
-    for i in range(fermi_idx, -1, -1):
-        if is_zero(tdos_up[i]) and is_zero(tdos_down[i]):
-            vbm = energy[i]
+def _find_zero_intervals(energy, tdos_up, tdos_down, zero_tol=1e-5):
+    intervals = []
+    in_zero = False
+    start_e = None
+    for e, u, d in zip(energy, tdos_up, tdos_down):
+        if abs(u) < zero_tol and abs(d) < zero_tol:
+            if not in_zero:
+                in_zero = True
+                start_e = e
         else:
-            break
+            if in_zero:
+                intervals.append((start_e, prev_e))
+                in_zero = False
+        prev_e = e
+    if in_zero:
+        intervals.append((start_e, prev_e))
+    return [(s, e) for s, e in intervals if e > s]
 
-    cbm = None
-    for i in range(fermi_idx, len(energy)):
-        if is_zero(tdos_up[i]) and is_zero(tdos_down[i]):
-            cbm = energy[i]
-        else:
-            break
+def detect_bandgap_advanced(energy, tdos_up, tdos_down, zero_tol=1e-5,
+                            min_gap=0.1, max_gap=7.0, fermi_window=1.0):
+    """Detect bandgap possibly shifted from Fermi.
 
-    if vbm is None or cbm is None or cbm <= vbm:
+    Offset gap rule (updated):
+      Accept if Fermi not inside zero-DOS interval BUT either VBM or CBM lies within
+      ±fermi_window of 0 eV.
+    """
+    intervals = _find_zero_intervals(energy, tdos_up, tdos_down, zero_tol=zero_tol)
+    if not intervals:
         return None
-
-    return vbm, cbm, cbm - vbm
+    candidates = []
+    for s, e in intervals:
+        w = e - s
+        if w >= min_gap and w <= max_gap:
+            candidates.append((s, e, w))
+    if not candidates:
+        return None
+    fermi_gap = [c for c in candidates if c[0] <= 0 <= c[1]]
+    if fermi_gap:
+        fermi_gap.sort(key=lambda x: (-x[2], abs((x[0]+x[1])/2)))
+        s, e, w = fermi_gap[0]
+        return {'vbm': s, 'cbm': e, 'width': w, 'type': 'fermi_gap', 'message': 'Bandgap spans the Fermi level.'}
+    # New edge-based offset detection
+    edge_offset = []
+    for s, e, w in candidates:
+        vbm_dist = abs(s)
+        cbm_dist = abs(e)
+        if min(vbm_dist, cbm_dist) <= fermi_window:  # Either edge close to Fermi
+            edge_offset.append((s, e, w, min(vbm_dist, cbm_dist)))
+    if edge_offset:
+        edge_offset.sort(key=lambda x: (x[3], -x[2]))  # prioritize closer edge then wider gap
+        s, e, w, _ = edge_offset[0]
+        return {'vbm': s, 'cbm': e, 'width': w, 'type': 'offset_gap',
+                'message': 'Caution: Either the compound is metallic or there is bandgap shift.'}
+    return None
 
 def analyze_tdos(energy, tdos_up, tdos_down, symmetry_tol=0.01):
     print("\n----- Analysis Results -----")
-
-    max_dos = max(np.max(np.abs(tdos_up)), np.max(np.abs(tdos_down)), 1e-8)
-    sym_diff = np.mean(np.abs(tdos_up + tdos_down)) / max_dos
-    if sym_diff < symmetry_tol:
-        print("✅ Non-magnetic (TDOS-UP and DOWN are symmetric).")
+    
+    # Check if data is spin-polarized by comparing if up and down are identical arrays
+    is_spin_polarized = not np.array_equal(tdos_up, tdos_down)
+    
+    if is_spin_polarized:
+        max_dos = max(np.max(np.abs(tdos_up)), np.max(np.abs(tdos_down)), 1e-12)
+        sym_diff = np.mean(np.abs(tdos_up + tdos_down)) / max_dos
+        if sym_diff < symmetry_tol:
+            print("✅ Non-magnetic (TDOS-UP and DOWN are symmetric).")
+        else:
+            print("⚠️  Magnetic (TDOS-UP and DOWN differ noticeably).")
     else:
-        print("⚠️  Magnetic (TDOS-UP and DOWN differ noticeably).")
+        print("ℹ️  Non-spin-polarized calculation detected.")
 
-    bandgap_info = detect_bandgap_exact(energy, tdos_up, tdos_down)
-
-    if bandgap_info:
-        vbm, cbm, width = bandgap_info
-        print(f"✅ Bandgap region: {vbm:.3f} to {cbm:.3f} eV → Width: {width:.3f} eV")
+    gap = detect_bandgap_advanced(energy, tdos_up, tdos_down)
+    if gap:
+        if gap['type'] == 'fermi_gap':
+            print(f"✅ Bandgap detected: {gap['vbm']:.3f} to {gap['cbm']:.3f} eV → Width: {gap['width']:.3f} eV")
+        else:
+            print(f"⚠️  Offset bandgap candidate: {gap['vbm']:.3f} to {gap['cbm']:.3f} eV → Width: {gap['width']:.3f} eV")
+            print("    Note: Fermi lies outside this gap region.")
+        print(f"    {gap['message']}")
     else:
-        print("⚠️  No bandgap detected.")
+        print("⚠️  No bandgap detected (metallic or gap outside criteria).")
 
     print("-----------------------------\n")
-    return bandgap_info
+    return gap
 
 def plot_tdos(energy, tdos_up, tdos_down, directory):
     bandgap_info = analyze_tdos(energy, tdos_up, tdos_down)
@@ -88,9 +129,13 @@ def plot_tdos(energy, tdos_up, tdos_down, directory):
     plt.axvline(0, color='k', linestyle='--', label='Fermi (0 eV)')
 
     if bandgap_info:
-        start, end, _ = bandgap_info
-        plt.axvspan(start, end, color='red', alpha=0.2, label='Bandgap region')
-        plt.text((start + end) / 2, 0.02, f"Gap = {(end - start):.2f} eV", ha='center', color='red')
+        s = bandgap_info['vbm']; e_ = bandgap_info['cbm']
+        plt.axvspan(s, e_, color='red', alpha=0.18,
+                    label='Bandgap' if bandgap_info['type']=='fermi_gap' else 'Offset gap')
+        y_text = 0.02 * max(1e-6, np.max([np.max(np.abs(tdos_up)), np.max(np.abs(tdos_down))]))
+        plt.text(0.5*(s+e_), y_text, f"{bandgap_info['width']:.2f} eV", ha='center', color='red')
+        if bandgap_info['type'] == 'offset_gap':
+            plt.text(0.5*(s+e_), y_text*3, 'Offset from Fermi', ha='center', color='red', fontsize=8)
 
     plt.title(f"Total Density of States — {os.path.basename(directory)}")
     plt.xlabel("Energy (eV)")

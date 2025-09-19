@@ -40,58 +40,91 @@ plt.rcParams['font.family'] = ['Noto Sans Devanagari', 'DejaVu Sans']
 def is_zero(x, tol=1e-5):
     return abs(x) < tol
 
+# Legacy kept for compatibility (unused now)
 def detect_bandgap_exact(energy, tdos_up, tdos_down):
-    data = list(zip(energy, tdos_up, tdos_down))
-    data.sort()  # ensure sorted by energy ascending
+    return None
 
-    min_e, min_up, min_down = data[0]
-    if not (is_zero(min_up) and is_zero(min_down)):
-        return None  # No bandgap detected
+# --- Advanced bandgap detection utilities ---
 
-    fermi_idx = np.argmin(np.abs(energy))
-
-    vbm = None
-    for i in range(fermi_idx, -1, -1):
-        if is_zero(tdos_up[i]) and is_zero(tdos_down[i]):
-            vbm = energy[i]
+def _find_zero_intervals(energy, tdos_up, tdos_down, zero_tol=1e-5):
+    intervals = []
+    in_zero = False
+    start_e = None
+    prev_e = None
+    for e, u, d in zip(energy, tdos_up, tdos_down):
+        if abs(u) < zero_tol and abs(d) < zero_tol:
+            if not in_zero:
+                in_zero = True
+                start_e = e
         else:
-            break
+            if in_zero and prev_e is not None:
+                intervals.append((start_e, prev_e))
+                in_zero = False
+        prev_e = e
+    if in_zero and prev_e is not None:
+        intervals.append((start_e, prev_e))
+    return [(s, e) for s, e in intervals if e > s]
 
-    cbm = None
-    for i in range(fermi_idx, len(energy)):
-        if is_zero(tdos_up[i]) and is_zero(tdos_down[i]):
-            cbm = energy[i]
-        else:
-            break
-
-    if vbm is None or cbm is None or cbm <= vbm:
+def detect_bandgap_advanced(energy, tdos_up, tdos_down, zero_tol=1e-5,
+                            min_gap=0.1, max_gap=7.0, fermi_window=1.0):
+    intervals = _find_zero_intervals(energy, tdos_up, tdos_down, zero_tol=zero_tol)
+    if not intervals:
         return None
-
-    return vbm, cbm, cbm - vbm
+    candidates = []
+    for s, e in intervals:
+        w = e - s
+        if min_gap <= w <= max_gap:
+            candidates.append((s, e, w))
+    if not candidates:
+        return None
+    fermi_gaps = [c for c in candidates if c[0] <= 0 <= c[1]]
+    if fermi_gaps:
+        fermi_gaps.sort(key=lambda x: (-x[2], abs((x[0]+x[1]) / 2)))
+        s, e, w = fermi_gaps[0]
+        return {'vbm': s, 'cbm': e, 'width': w, 'type': 'fermi_gap', 'message': 'Bandgap spans the Fermi level.'}
+    # Edge-based offset gap: accept if either edge within ±fermi_window
+    edge_candidates = []
+    for s, e, w in candidates:
+        v_dist = abs(s)
+        c_dist = abs(e)
+        edge_min = min(v_dist, c_dist)
+        if edge_min <= fermi_window:
+            edge_candidates.append((s, e, w, edge_min))
+    if edge_candidates:
+        edge_candidates.sort(key=lambda x: (x[3], -x[2]))
+        s, e, w, _ = edge_candidates[0]
+        return {'vbm': s, 'cbm': e, 'width': w, 'type': 'offset_gap',
+                'message': 'Caution: Either the compound is metallic or there is bandgap shift.'}
+    return None
 
 def analyze_tdos_bandgap(energy, tdos_up, tdos_down, symmetry_tol=0.01):
-    """Analyze TDOS for magnetic behavior and bandgap"""
     print("\n----- TDOS Analysis Results -----")
-
-    max_dos = max(np.max(np.abs(tdos_up)), np.max(np.abs(tdos_down)), 1e-8)
-    sym_diff = np.mean(np.abs(tdos_up + tdos_down)) / max_dos
-    if sym_diff < symmetry_tol:
-        print("✅ Non-magnetic (TDOS-UP and DOWN are symmetric).")
+    
+    # Check if data is spin-polarized by comparing if up and down are identical arrays
+    is_spin_polarized = not np.array_equal(tdos_up, tdos_down)
+    
+    if is_spin_polarized:
+        max_dos = max(np.max(np.abs(tdos_up)), np.max(np.abs(tdos_down)), 1e-12)
+        sym_diff = np.mean(np.abs(tdos_up + tdos_down)) / max_dos
+        if sym_diff < symmetry_tol:
+            print("✅ Non-magnetic (TDOS-UP and DOWN are symmetric).")
+        else:
+            print("⚠️  Magnetic (TDOS-UP and DOWN differ noticeably).")
     else:
-        print("⚠️  Magnetic (TDOS-UP and DOWN differ noticeably).")
-
-    bandgap_info = detect_bandgap_exact(energy, tdos_up, tdos_down)
-
-    if bandgap_info:
-        vbm, cbm, width = bandgap_info
-        print(f"✅ Bandgap detected: {vbm:.3f} to {cbm:.3f} eV → Width: {width:.3f} eV")
-        print(f"   VBM (Valence Band Maximum): {vbm:.3f} eV")
-        print(f"   CBM (Conduction Band Minimum): {cbm:.3f} eV")
+        print("ℹ️  Non-spin-polarized calculation detected.")
+    
+    gap = detect_bandgap_advanced(energy, tdos_up, tdos_down)
+    if gap:
+        if gap['type'] == 'fermi_gap':
+            print(f"✅ Bandgap detected: {gap['vbm']:.3f} to {gap['cbm']:.3f} eV → Width: {gap['width']:.3f} eV")
+        else:
+            print(f"⚠️  Offset bandgap candidate: {gap['vbm']:.3f} to {gap['cbm']:.3f} eV → Width: {gap['width']:.3f} eV")
+            print("    Note: Fermi lies outside this zero-DOS interval.")
+        print(f"    {gap['message']}")
     else:
-        print("⚠️  No bandgap detected - Material appears to be metallic.")
-
+        print("⚠️  No bandgap detected (metallic or outside 0.1–7 eV range).\n")
     print("----------------------------------\n")
-    return bandgap_info
+    return gap
 
 # Import color manager
 try:
@@ -504,12 +537,6 @@ def show_help():
    • Test different spin filters (UP/DOWN) for magnetic materials
    • Use fill for publication-quality plots
    • Inline colors override scheme colors for specific elements
-
-📋 NOTES:
-   • Files are auto-generated using vaspkit if missing
-   • All color schemes read from ElementColorSchemes.yaml
-   • Program supports both spin-polarized and non-magnetic calculations
-   • Multiple elements can have different individual colors
    • Order matters for inline colors: specify element, orbitals, then color
 
 """)
