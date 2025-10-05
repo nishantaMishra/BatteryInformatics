@@ -145,12 +145,17 @@ def input_with_completion(prompt):
     def complete(text, state):
         options = [path for path in glob.glob(text + '*')]
         if state < len(options):
-            return options[state] + ' '
+            path = options[state]
+            if os.path.isdir(path):
+                return path + os.sep  # Add directory separator (/ on Unix, \ on Windows)
+            else:
+                return path + ' '  # Add space for files
         else:
             return None
 
     readline.set_completer_delims('\t')
     readline.parse_and_bind("tab: complete")
+    readline.set_completer(complete)
 
     return input(prompt)
 
