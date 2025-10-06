@@ -230,7 +230,7 @@ def plot_structure(poscar_path):
         plt.show()
         
         z_cut = float(input("Enter z-cutoff (Å): "))
-        return structure, z_cut
+        return structure, z_cut, list(range(len(coords)))  # All atoms included
     
     # Load z_cut.py as a module
     try:
@@ -260,10 +260,13 @@ def plot_structure(poscar_path):
         # Get the structure
         structure = z_cut_module.structure
         
+        # Get the included atoms (not excluded by user)
+        included_atoms = z_cut_module.get_included_atoms()
+        
         # Restore original directory
         os.chdir(current_dir)
         
-        return structure, z_cut
+        return structure, z_cut, included_atoms
         
     except Exception as e:
         print(f"Error loading z_cut.py: {e}")
@@ -294,7 +297,7 @@ def plot_structure(poscar_path):
         plt.show()
         
         z_cut = float(input("Enter z-cutoff (Å): "))
-        return structure, z_cut
+        return structure, z_cut, list(range(len(coords)))  # All atoms included
 
 # ---------- Main routine ----------
 
@@ -311,13 +314,13 @@ def main():
         
     print("Files ready:", potcar, poscar, acf)
 
-    # Plot and get z_cut
-    structure, z_cut = plot_structure(poscar)
+    # Plot and get z_cut and included atoms
+    structure, z_cut, included_atoms = plot_structure(poscar)
 
-    # Identify adsorbate atoms
+    # Identify adsorbate atoms - filter by both z-cut and user selection
     coords = np.array([s.coords for s in structure])
     elems = [str(s.specie) for s in structure]
-    ads_indices = [i for i, c in enumerate(coords[:, 2]) if c > z_cut]
+    ads_indices = [i for i in included_atoms if coords[i, 2] > z_cut]
     ads_elems = [elems[i] for i in ads_indices]
 
     # Print composition summary
@@ -363,5 +366,4 @@ def main():
     print(f"(Positive → electron loss, Negative → electron gain)")
 
 if __name__ == "__main__":
-    main()
     main()
