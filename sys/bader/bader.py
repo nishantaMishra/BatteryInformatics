@@ -91,7 +91,10 @@ def check_required_files(calc_dir):
     
     # Required for Bader analysis generation
     if not file_exists(acf):
-        if not all([file_exists(aeccar0), file_exists(aeccar2), file_exists(chgcar)]):
+        aeccar_available = file_exists(aeccar0) and file_exists(aeccar2)
+        chgcar_available = file_exists(chgcar)
+        
+        if not aeccar_available and not chgcar_available:
             missing_charge_files = []
             for charge_file in [chgcar, aeccar0, aeccar2]:
                 if not file_exists(charge_file):
@@ -103,19 +106,29 @@ def check_required_files(calc_dir):
             return None, None, None
             
         # Try to generate the needed files
-        print("Some required files are missing. Attempting to generate them...")
         success = True
         
-        if not file_exists(os.path.join(calc_dir, "CHGCAR_sum")):
-            success = run_cmd(["perl", chgsum, "AECCAR0", "AECCAR2"], calc_dir)
+        # Try sophisticated method first if AECCAR files are available
+        if aeccar_available:
+            print("Generating Bader analysis using sophisticated method with AECCAR files...")
+            if not file_exists(os.path.join(calc_dir, "CHGCAR_sum")):
+                success = run_cmd(["perl", chgsum, "AECCAR0", "AECCAR2"], calc_dir)
+                if not success:
+                    print(f"{RED}Failed to generate CHGCAR_sum from AECCAR files.{RESET}")
+                    # Don't return yet, try the minimal method as fallback if CHGCAR is available
+            
+            if success:
+                success = run_cmd([bader_exec, "CHGCAR", "-ref", "CHGCAR_sum"], calc_dir)
+                if not success:
+                    print(f"{RED}Failed to generate Bader analysis with sophisticated method.{RESET}")
+                    # Continue to try minimal method if CHGCAR is available
+        
+        # If sophisticated method failed or AECCAR files aren't available, try minimal method
+        if (not aeccar_available or not success) and chgcar_available:
+            print("Falling back to minimal Bader calculation method using only CHGCAR...")
+            success = run_cmd([bader_exec, "CHGCAR"], calc_dir)
             if not success:
-                print(f"{RED}Failed to generate CHGCAR_sum from AECCAR files.{RESET}")
-                return None, None, None
-                
-        if success and not file_exists(acf):
-            success = run_cmd([bader_exec, "CHGCAR", "-ref", "CHGCAR_sum"], calc_dir)
-            if not success:
-                print(f"{RED}Failed to generate Bader analysis (ACF.dat).{RESET}")
+                print(f"{RED}Failed to generate Bader analysis with minimal method.{RESET}")
                 return None, None, None
     
     # Final check if all needed files exist
