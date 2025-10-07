@@ -18,25 +18,13 @@ def main():
     # Get the directory of this script to find z_cut.py
     script_dir = os.path.dirname(os.path.abspath(__file__))
     z_cut_path = None
+
+    # Only use the shared z_cut.py in the parent directory of the repo
+    z_cut_path = os.path.normpath(os.path.join(script_dir, "..", "z_cut.py"))
     
-    # Look for z_cut.py in multiple locations - updated paths
-    possible_locations = [
-        os.path.join(script_dir, "z_cut.py"),
-        os.path.join(script_dir, "..", "threshold_edit", "z_cut.py"),
-        os.path.join(script_dir, "..", "bader", "z_cut.py")
-    ]
-    
-    for location in possible_locations:
-        normalized_path = os.path.normpath(location)
-        if os.path.exists(normalized_path):
-            z_cut_path = normalized_path
-            break
-    
-    if not z_cut_path:
-        print("Error: z_cut.py not found in expected locations!")
-        print("Looked in:")
-        for loc in possible_locations:
-            print(f"  - {os.path.normpath(loc)}")
+    if not os.path.exists(z_cut_path):
+        print("Error: z_cut.py not found at expected location!")
+        print(f"Expected: {z_cut_path}")
         sys.exit(1)
     
     print(f"Using z_cut.py from: {z_cut_path}")
@@ -78,13 +66,10 @@ def main():
             if i in excluded_atoms:
                 # Excluded atoms go to the opposite side of where they would normally be
                 if coords[i, 2] < z_cutoff:
-                    # Atom is below z-cutoff, so move it to molecule (above)
                     mol_atoms.append(i)
                 else:
-                    # Atom is above z-cutoff, so move it to surface (below)
                     surf_atoms.append(i)
             else:
-                # Normal assignment based on z-cutoff
                 if coords[i, 2] < z_cutoff:
                     surf_atoms.append(i)
                 else:
