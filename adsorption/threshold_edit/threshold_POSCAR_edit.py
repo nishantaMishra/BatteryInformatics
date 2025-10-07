@@ -52,11 +52,12 @@ def input_with_completion(prompt):
 
 def plot_structure(poscar_path):
     """Plot 3D atomic structure with interactive z-cut slider using z_cut.py"""
-    # Get the directory of the current script
+    # Get the shared z_cut.py location (parent directory of current script)
     script_dir = os.path.dirname(os.path.abspath(__file__))
+    parent_dir = os.path.dirname(script_dir)  # Go up one level from threshold_edit/
     
-    # Full path to z_cut.py
-    z_cut_path = os.path.join(script_dir, "z_cut.py")
+    # Full path to shared z_cut.py
+    z_cut_path = os.path.join(parent_dir, "z_cut.py")
     
     if not os.path.exists(z_cut_path):
         print(f"Warning: z_cut.py not found at {z_cut_path}")
@@ -105,6 +106,11 @@ def plot_structure(poscar_path):
         
         # Modify z_cut module's variables
         z_cut_module.poscar_file = os.path.basename(poscar_path)
+        
+        # Set terminology for threshold editing context
+        z_cut_module.action_verb = "remove"
+        z_cut_module.action_past_tense = "removed"
+        z_cut_module.undo_description = "removal"
         
         # Run the visualization
         z_cut_module.update_plot(z_cut_module.z_cut_guess, True, True)
