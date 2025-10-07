@@ -86,7 +86,7 @@ def plot_structure(poscar_path):
         plt.tight_layout()
         plt.show()
         
-        return None
+        return None, set()
     
     # Load z_cut.py as a module
     try:
@@ -110,13 +110,14 @@ def plot_structure(poscar_path):
         z_cut_module.update_plot(z_cut_module.z_cut_guess, True, True)
         plt.show()
         
-        # Get the z_cut value from the slider
+        # Get the z_cut value and excluded atoms from the slider
         z_cut = z_cut_module.z_slider.val
+        excluded_atoms = z_cut_module.excluded_atoms.copy()
         
         # Restore original directory
         os.chdir(current_dir)
         
-        return z_cut
+        return z_cut, excluded_atoms
         
     except Exception as e:
         print(f"Error loading z_cut.py: {e}")
@@ -145,7 +146,7 @@ def plot_structure(poscar_path):
         plt.tight_layout()
         plt.show()
         
-        return None
+        return None, set()
 
 def freeze_custom_region():
     # New: ask operation first, using tab completion for file path
@@ -182,26 +183,42 @@ def freeze_custom_region():
 
     print("Choose operation:")
     print("1. Fix (freeze) atoms based on threshold")
-    print("2. Delete atoms based on threshold")
+    print("2. Delete atoms based on threshold (includes manual selection)")
     op_choice = input("Enter 1 or 2: ").strip()
     if op_choice not in ['1', '2']:
         print("Invalid operation choice.")
         return
 
+    # Initialize variables for manual selection
+    manually_excluded_atoms = set()
+    threshold = None
+
     # Offer z_cut.py visualization option
     print("Choose threshold determination method:")
     print("1. Enter threshold value manually")
-    print("2. Use interactive visualization (z_cut.py)")
+    print("2. Use interactive visualization")
+    if op_choice == '2':
+        print("   Note: In visualization mode, you can also manually select atoms to delete")
+        print("   Instructions: Click atoms to select, Backspace to exclude, Ctrl+Z to undo")
+    
     threshold_method = input("Enter 1 or 2: ").strip()
     
     if threshold_method == '2':
         print("Launching interactive visualization...")
-        threshold = plot_structure(file_path)
-        if threshold is None:
+        if op_choice == '2':
+            print("You can manually exclude atoms in addition to the threshold-based selection")
+            print("Excluded atoms will be deleted regardless of their z-position")
+        
+        result = plot_structure(file_path)
+        if result[0] is None:
             print("Interactive threshold determination failed. Falling back to manual entry.")
             threshold_method = '1'
         else:
+            threshold, manually_excluded_atoms = result
             print(f"Z-cut value from visualization: {threshold:.4f} Å")
+            if manually_excluded_atoms and op_choice == '2':
+                print(f"Manually excluded atoms: {len(manually_excluded_atoms)} atoms")
+                print(f"Excluded atom indices: {sorted(list(manually_excluded_atoms))}")
     
     if threshold_method == '1':
         try:
@@ -216,6 +233,9 @@ def freeze_custom_region():
     print(f"Choose region criterion: {operation_name}")
     print("1. Atoms with z > threshold")
     print("2. Atoms with z < threshold")
+    if op_choice == '2' and manually_excluded_atoms:
+        print(f"   Plus {len(manually_excluded_atoms)} manually excluded atoms")
+    
     region_choice = input("Enter 1 or 2: ").strip()
     if region_choice not in ['1', '2']:
         print("Invalid region choice.")
@@ -295,7 +315,7 @@ def freeze_custom_region():
             f.writelines(lines[:coord_start] + modified_coords)
         print(f"Modified POSCAR written to {output_path}")
     else:
-        # Delete mode: remove atoms satisfying condition, update counts
+        # Delete mode: remove atoms satisfying condition OR manually excluded, update counts
         total_atoms = sum(counts)
         species_boundaries = []
         running = 0
@@ -306,6 +326,8 @@ def freeze_custom_region():
         kept_coords = []
         removed_per_species = [0] * len(counts)
         atom_index = 0  # index among atoms (excluding blank/comment lines)
+        manually_deleted_count = 0
+        threshold_deleted_count = 0
 
         for line in atom_coords:
             parts = line.split()
@@ -330,9 +352,16 @@ def freeze_custom_region():
             while species_idx < len(species_boundaries) - 1 and atom_index >= species_boundaries[species_idx]:
                 species_idx += 1
                 
-            condition = (z > threshold) if region_choice == '1' else (z < threshold)
-            if condition:
+            # Check if atom should be deleted (manually excluded OR threshold condition)
+            manually_excluded = atom_index in manually_excluded_atoms
+            threshold_condition = (z > threshold) if region_choice == '1' else (z < threshold)
+            
+            if manually_excluded or threshold_condition:
                 removed_per_species[species_idx] += 1
+                if manually_excluded:
+                    manually_deleted_count += 1
+                if threshold_condition:
+                    threshold_deleted_count += 1
                 # skip adding this coordinate line (deleting atom)
             else:
                 kept_coords.append(line)
@@ -348,8 +377,21 @@ def freeze_custom_region():
         output_path = file_path + "_deleted.vasp"
         with open(output_path, 'w') as f:
             f.writelines(lines[:coord_start] + kept_coords)
+        
         removed_total = sum(removed_per_species)
-        print(f"Deleted {removed_total} atoms; modified POSCAR written to {output_path}")
+        print(f"Deleted {removed_total} atoms total:")
+        if manually_excluded_atoms:
+            print(f"  - {manually_deleted_count} manually excluded atoms")
+            # Account for overlap between manual and threshold deletion
+            overlap = manually_deleted_count + threshold_deleted_count - removed_total
+            if overlap > 0:
+                print(f"  - {threshold_deleted_count - overlap} atoms by threshold (z-cut)")
+                print(f"  - {overlap} atoms met both criteria")
+            else:
+                print(f"  - {threshold_deleted_count} atoms by threshold (z-cut)")
+        else:
+            print(f"  - All {threshold_deleted_count} atoms deleted by threshold (z-cut)")
+        print(f"Modified POSCAR written to {output_path}")
 
 freeze_custom_region()
 
