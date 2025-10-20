@@ -40,6 +40,17 @@ coords = np.array([site.coords for site in structure])
 elems = [str(site.specie) for site in structure]
 z = coords[:, 2]
 
+# Read selective dynamics if available
+selective_dynamics = None
+if hasattr(pos, 'selective_dynamics') and pos.selective_dynamics is not None:
+    selective_dynamics = np.array(pos.selective_dynamics)
+    print(f"Selective dynamics detected:")
+    print(f"  {np.sum(~selective_dynamics[:, 0])} atoms fixed in x")
+    print(f"  {np.sum(~selective_dynamics[:, 1])} atoms fixed in y")
+    print(f"  {np.sum(~selective_dynamics[:, 2])} atoms fixed in z")
+else:
+    print("No selective dynamics found in POSCAR file")
+
 # --- Colour map by element ---
 unique_elems = sorted(set(elems))
 colours = plt.cm.tab10(np.linspace(0, 1, len(unique_elems)))
@@ -97,6 +108,50 @@ def draw_unit_cell(ax, lattice):
 view_limits = None  # Will store (xmin, xmax, ymin, ymax, zmin, zmax)
 initial_limits_set = False  # Flag to track if we've set initial limits
 view_modified = False  # Track if view has been modified by navigation tools
+use_perspective = False  # Track projection type
+show_selective_dynamics = True  # Show selective dynamics markers by default
+
+# Function to draw selective dynamics markers on fixed atoms
+def draw_selective_dynamics_markers(ax, atom_idx, coords, selective_dynamics, marker_scale=1.0):
+    """
+    Draw markers showing which axes are fixed for a given atom.
+    - Red markers for fixed x-axis
+    - Green markers for fixed y-axis  
+    - Blue markers for fixed z-axis
+    """
+    if selective_dynamics is None:
+        return
+    
+    x, y, z_pos = coords[atom_idx]
+    fixed = ~selective_dynamics[atom_idx]  # True where atom is fixed
+    
+    # Only draw if at least one axis is fixed
+    if not np.any(fixed):
+        return
+    
+    # Draw small crosses/lines for each fixed axis
+    # Use different orientations for better visibility
+    
+    # Fixed x-axis: draw in YZ plane (perpendicular to x)
+    if fixed[0]:
+        ax.plot([x, x], [y - marker_scale, y + marker_scale], [z_pos, z_pos], 
+                'r-', linewidth=2.5, alpha=0.9, zorder=20)
+        ax.plot([x, x], [y, y], [z_pos - marker_scale, z_pos + marker_scale], 
+                'r-', linewidth=2.5, alpha=0.9, zorder=20)
+    
+    # Fixed y-axis: draw in XZ plane (perpendicular to y)
+    if fixed[1]:
+        ax.plot([x - marker_scale, x + marker_scale], [y, y], [z_pos, z_pos], 
+                'g-', linewidth=2.5, alpha=0.9, zorder=20)
+        ax.plot([x, x], [y, y], [z_pos - marker_scale, z_pos + marker_scale], 
+                'g-', linewidth=2.5, alpha=0.9, zorder=20)
+    
+    # Fixed z-axis: draw in XY plane (perpendicular to z)
+    if fixed[2]:
+        ax.plot([x - marker_scale, x + marker_scale], [y, y], [z_pos, z_pos], 
+                'b-', linewidth=2.5, alpha=0.9, zorder=20)
+        ax.plot([x, x], [y - marker_scale, y + marker_scale], [z_pos, z_pos], 
+                'b-', linewidth=2.5, alpha=0.9, zorder=20)
 
 # Function to update the plot based on z_cut value
 def update_plot(z_value, show_above=True, show_below=True, preserve_view=True):
@@ -195,6 +250,21 @@ def update_plot(z_value, show_above=True, show_below=True, preserve_view=True):
             ax.scatter(coords[i, 0], coords[i, 1], coords[i, 2],
                        s=size, alpha=0.25, color='gray', edgecolors=colour_map[el], linewidth=1)
     
+    # Draw selective dynamics markers for visible, non-excluded atoms
+    if show_selective_dynamics and selective_dynamics is not None:
+        # Calculate marker scale based on coordinate range (about 2-3% of range)
+        coord_range = (coords.max(axis=0) - coords.min(axis=0)).max()
+        marker_scale = coord_range * 0.025
+        
+        for i in range(len(coords)):
+            if i not in excluded_atoms:
+                # Check if atom is visible based on z-cut settings
+                is_visible = ((show_above and coords[i, 2] >= z_value) or 
+                             (show_below and coords[i, 2] < z_value) or
+                             (show_above and show_below))
+                if is_visible:
+                    draw_selective_dynamics_markers(ax, i, coords, selective_dynamics, marker_scale)
+    
     # Highlight currently selected atom (if not excluded and currently visible)
     if selected_atom is not None and selected_atom not in excluded_atoms:
         sel_ok = ((show_above and coords[selected_atom, 2] >= z_value) or
@@ -254,6 +324,9 @@ def update_plot(z_value, show_above=True, show_below=True, preserve_view=True):
     # Set view angle (modified to ensure consistent orientation)
     ax.view_init(elev=elev_slider.val, azim=azim_slider.val)
     
+    # Set projection type
+    ax.set_proj_type('persp' if use_perspective else 'ortho')
+    
     # Add structure info
     formula = structure.composition.reduced_formula
     num_atoms = len(structure)
@@ -287,6 +360,13 @@ def update_plot(z_value, show_above=True, show_below=True, preserve_view=True):
     ax.text2D(0.5, 0.02, instructions, transform=ax.transAxes, 
               fontsize=9, horizontalalignment='center',
               bbox=dict(boxstyle='round', facecolor='lightyellow', alpha=0.9))
+    
+    # Add legend for selective dynamics markers if shown
+    if show_selective_dynamics and selective_dynamics is not None:
+        marker_legend = "Fixed axes: Red=x, Green=y, Blue=z"
+        ax.text2D(0.98, 0.02, marker_legend, transform=ax.transAxes,
+                  fontsize=8, horizontalalignment='right', verticalalignment='bottom',
+                  bbox=dict(boxstyle='round', facecolor='lightblue', alpha=0.8))
     
     fig.canvas.draw_idle()
 
@@ -455,6 +535,29 @@ def clear_exclusions(event):
     print(f"All atom {undo_description}s cleared")
     update_plot(z_slider.val, check.get_status()[0], check.get_status()[1], preserve_view=True)
 clear_excl_button.on_clicked(clear_exclusions)
+
+# Add a button to toggle projection type
+proj_toggle_ax = plt.axes([0.025, 0.32, 0.15, 0.03])
+proj_toggle_button = plt.Button(proj_toggle_ax, 'Perspective View')
+
+def toggle_projection(event):
+    global use_perspective
+    use_perspective = not use_perspective
+    proj_toggle_button.label.set_text('Parallel View' if use_perspective else 'Perspective View')
+    update_plot(z_slider.val, check.get_status()[0], check.get_status()[1], preserve_view=True)
+proj_toggle_button.on_clicked(toggle_projection)
+
+# Add a button to toggle selective dynamics markers (only if selective dynamics exists)
+if selective_dynamics is not None:
+    sel_dyn_ax = plt.axes([0.025, 0.36, 0.15, 0.03])
+    sel_dyn_button = plt.Button(sel_dyn_ax, 'Hide Fixed Markers')
+    
+    def toggle_selective_dynamics(event):
+        global show_selective_dynamics
+        show_selective_dynamics = not show_selective_dynamics
+        sel_dyn_button.label.set_text('Show Fixed Markers' if not show_selective_dynamics else 'Hide Fixed Markers')
+        update_plot(z_slider.val, check.get_status()[0], check.get_status()[1], preserve_view=True)
+    sel_dyn_button.on_clicked(toggle_selective_dynamics)
 
 # Function to get included atoms (for external use)
 def get_included_atoms():
