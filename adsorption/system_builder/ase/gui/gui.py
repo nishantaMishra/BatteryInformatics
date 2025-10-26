@@ -104,6 +104,11 @@ class GUI(View):
         self.tab_view_settings = {}  # Store view settings for each tab
         self.tab_selection_state = {}  # Store selection state for each tab
 
+        # Pan mode state: when True, canvas cursor becomes a 4-spoked
+        # "move" cursor (Tk 'fleur') and user can drag to pan.
+        self.pan_mode = False
+        self.last_pan_pos = None
+
     @property
     def moving(self):
         return self.arrowkey_mode != self.ARROWKEY_SCAN
@@ -848,12 +853,16 @@ class GUI(View):
                     M(_('a1,a3-plane'), self.set_view, 'Shift+J'),
                     M(_('a2,a1-plane'), self.set_view, 'Shift+K'),
                     M('---'),
+                    # Toggle interactive pan mode: change cursor and allow drag-to-pan
+                    M(_('Pan'), self.toggle_pan_mode, 'P'),
+                    M('---'),
                     M(_('Along a-axis'), self.align_along_a),
                     M(_('Along b-axis'), self.align_along_b),
                     M(_('Along c-axis'), self.align_along_c),
                     M(_('Along a*-axis'), self.align_along_a_star),
                     M(_('Along b*-axis'), self.align_along_b_star),
-                    M(_('Along c*-axis'), self.align_along_c_star)]),
+                    M(_('Along c*-axis'), self.align_along_c_star
+                    )]),
               M(_('Settings ...'), self.settings),
               M('---'),
               M(_('VMD'), partial(self.external_viewer, 'vmd')),
@@ -946,6 +955,95 @@ class GUI(View):
 
         self.window.win.after(ms, callbackwrapper)
 
+
+    # --- Added pan utilities ---
+    def toggle_pan_mode(self, key=None):
+        """Toggle pan mode and update canvas cursor to a four-spoked asterisk."""
+        self.pan_mode = not getattr(self, "pan_mode", False)
+        try:
+            canvas = getattr(self.window, "canvas", None)
+            if canvas is not None:
+                canvas.configure(cursor='fleur' if self.pan_mode else '')
+        except Exception:
+            pass
+        try:
+            # ensure GUI keeps focus for keyboard shortcuts
+            self.window.win.focus_force()
+        except Exception:
+            pass
+        return self.pan_mode
+
+    def press(self, event):
+        """Handle mouse press. Start panning if pan_mode is active."""
+        if getattr(self, "pan_mode", False):
+            try:
+                # Store start position (pixels) and original center
+                self._pan_start = np.array([event.x, event.y])
+                self._pan_orig_center = self.center.copy()
+                # Ensure focus so keyboard shortcuts still work
+                try:
+                    self.window.win.focus_force()
+                except Exception:
+                    pass
+            except Exception:
+                # If anything goes wrong, ignore and fall back
+                self._pan_start = None
+            return
+        # Default behaviour - delegate to View.press
+        try:
+            return super().press(event)
+        except Exception:
+            return None
+
+    def move(self, event):
+        """Handle mouse motion. If panning, compute displacement and update center."""
+        if getattr(self, "pan_mode", False) and getattr(self, "_pan_start", None) is not None:
+            try:
+                cur = np.array([event.x, event.y])
+                delta = cur - self._pan_start  # pixels: +x right, +y down
+
+                # Convert pixel delta to a world displacement.
+                # Map pixel fraction to world by scaling with original scale and axes.
+                try:
+                    w, h = self.window.size
+                except Exception:
+                    w, h = 450.0, 450.0
+
+                # normalized screen displacement (right, up)
+                frac = np.array([delta[0] / max(1.0, w), -delta[1] / max(1.0, h), 0.0])
+
+                # Choose a sensible mapping to world coordinates using axes and scale.
+                # The factor controls sensitivity; tune if needed.
+                sensitivity = max(0.5, self.orig_scale)  # avoid too small numbers
+                world_vec = (frac[0] * self.axes[:, 0] + frac[1] * self.axes[:, 1]) * sensitivity
+
+                # Apply pan relative to original center so panning is smooth while dragging
+                self.center = self._pan_orig_center - world_vec
+                self.draw()
+            except Exception:
+                pass
+            return
+
+        # Not panning: delegate to View.move
+        try:
+            return super().move(event)
+        except Exception:
+            return None
+
+    def release(self, event):
+        """End panning on mouse release (cleanup)."""
+        if getattr(self, "pan_mode", False) and getattr(self, "_pan_start", None) is not None:
+            try:
+                del self._pan_start
+                del self._pan_orig_center
+            except Exception:
+                pass
+            return
+        try:
+            return super().release(event)
+        except Exception:
+            return None
+    # --- end added pan utilities ---
 
 def webpage():
     import webbrowser
