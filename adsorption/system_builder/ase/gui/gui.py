@@ -406,7 +406,8 @@ class GUI(View):
             images.selected = np.zeros(len(images.selected), bool)
 
         tab_title = filename.split('/')[-1]  # Extract the file name from the path
-        tab_id = self.tab_control.add_tab(tab_title)
+        # Pass full filepath so the TabControl can show it on hover
+        tab_id = self.tab_control.add_tab(tab_title, filepath=filename)
         self.tabs[tab_id] = images
 
         # Make the new tab current and associate a view for it (inherit current

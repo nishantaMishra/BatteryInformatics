@@ -862,38 +862,105 @@ class TabControl(Widget):
             # Older ttk versions may not support takefocus; ignore.
             pass
 
+        # Mapping tab_id -> filepath (for tooltip display)
+        self.filepaths = {}
+        self._current_hover_index = None
+        self._tooltip = None
+
+        # Bind notebook events for tab change and hover handling
+        self.notebook.bind("<<NotebookTabChanged>>", self._on_tab_change)
+        # Motion and leave for hover-tooltips
+        try:
+            self.notebook.bind("<Motion>", self._on_motion)
+            self.notebook.bind("<Leave>", self._hide_tooltip)
+        except Exception:
+            pass
+
     def pack(self, **kwargs):
         self.notebook.pack(**kwargs)
 
-    def add_tab(self, title):
-        """Add a new tab with the given title."""
+    def add_tab(self, title, filepath=None):
+        """Add a new tab with title. Optionally provide filepath for hover tooltip.
+        Returns a tab_id integer used by the GUI to reference this tab."""
         frame = tk.Frame(self.notebook)
-        # Prevent the tab frame from taking focus to ensure arrow keys work
         try:
             frame.configure(takefocus=0)
         except Exception:
-            # Older tk versions may not support takefocus; ignore.
             pass
         self.notebook.add(frame, text=title)
         tab_id = len(self.tabs)
         self.tabs[tab_id] = frame
-        self.notebook.bind("<<NotebookTabChanged>>", self._on_tab_change)
+        if filepath is not None:
+            self.filepaths[tab_id] = filepath
         return tab_id
 
     def _on_tab_change(self, event):
-        """Handle tab change events."""
-        selected_tab = self.notebook.index(self.notebook.select())
-        if selected_tab in self.tabs:
-            self.switch_callback(selected_tab)
-            # Ensure the main window regains focus after tab switch
-            # This is critical for arrow key functionality
+        """Handle tab change events by calling the provided switch callback
+        with the currently selected tab id."""
+        try:
+            # notebook.select() returns internal tab id; index(...) gives integer index
+            sel_index = self.notebook.index(self.notebook.select())
+        except Exception:
+            sel_index = None
+        if sel_index is not None and self.switch_callback is not None:
             try:
-                # Focus the parent window to ensure key bindings work
-                parent = self.notebook.winfo_toplevel()
-                parent.focus_force()
+                self.switch_callback(sel_index)
             except Exception:
-                # Fallback: try to focus the notebook's parent
-                try:
-                    self.notebook.master.focus_force()
-                except Exception:
-                    pass
+                # Don't propagate exceptions from callback
+                pass
+
+    def _on_motion(self, event):
+        """Show tooltip with full filepath when hovering a tab label."""
+        try:
+            idx = None
+            # Determine tab index at pointer location
+            try:
+                idx = self.notebook.index(f"@{event.x},{event.y}")
+            except Exception:
+                idx = None
+
+            if idx is None:
+                self._hide_tooltip(event)
+                return
+
+            if idx == self._current_hover_index:
+                return  # still on same tab
+
+            self._current_hover_index = idx
+            self._hide_tooltip(event)
+
+            filepath = self.filepaths.get(idx)
+            if not filepath:
+                return
+
+            # Create simple tooltip window
+            self._tooltip = tk.Toplevel(self.notebook)
+            # No window decorations
+            try:
+                self._tooltip.wm_overrideredirect(True)
+            except Exception:
+                pass
+            lbl = tk.Label(self._tooltip, text=filepath, background="#ffffe0",
+                           relief='solid', borderwidth=1, justify='left',
+                           font=("TkDefaultFont", 9))
+            lbl.pack(ipadx=4, ipady=2)
+
+            # Place tooltip near mouse pointer
+            try:
+                x = self.notebook.winfo_rootx() + event.x + 12
+                y = self.notebook.winfo_rooty() + event.y + 20
+                self._tooltip.wm_geometry(f"+{x}+{y}")
+            except Exception:
+                pass
+        except Exception:
+            # Guard against any unexpected errors in hover handling
+            self._hide_tooltip(event)
+
+    def _hide_tooltip(self, event=None):
+        if self._tooltip is not None:
+            try:
+                self._tooltip.destroy()
+            except Exception:
+                pass
+            self._tooltip = None
+        self._current_hover_index = None
