@@ -279,7 +279,19 @@ class View:
         self.obs.new_atoms.register(win.notify_atoms_changed)
         return win
 
+    # Helper: ask GUI (if present) to snapshot view changes
+    def _push_undo_for_view_change(self):
+        try:
+            if hasattr(self, '_is_restoring_state') and self._is_restoring_state:
+                return
+            if hasattr(self, '_push_undo'):
+                self._push_undo('view_change')
+        except Exception:
+            pass
+
     def focus(self, x=None):
+        # record undo before changing scale/center
+        self._push_undo_for_view_change()
         cell = (self.window['toggle-show-unit-cell'] and
                 self.images[0].cell.any())
         if (len(self.atoms) == 0 and not cell):
@@ -311,11 +323,15 @@ class View:
         self.draw()
 
     def reset_view(self, menuitem):
+        # record undo for view reset
+        self._push_undo_for_view_change()
         self.axes = rotate('0.0x,0.0y,0.0z')
         self.set_frame()
         self.focus(self)
 
     def set_view(self, key):
+        # record undo for view change
+        self._push_undo_for_view_change()
         if key == 'Z':
             self.axes = rotate('0.0x,0.0y,0.0z')
         elif key == 'X':
@@ -684,9 +700,13 @@ class View:
             return
 
         if event.modifier == 'shift':
+            # record undo before shifting center
+            self._push_undo_for_view_change()
             self.center = (self.center0 -
                            np.dot(self.axes, (x - x0, y0 - y, 0)) / self.scale)
         else:
+            # record undo before rotating view
+            self._push_undo_for_view_change()
             # Snap mode: the a-b angle and t should multipla of 15 degrees ???
             a = x - x0
             b = y0 - y
