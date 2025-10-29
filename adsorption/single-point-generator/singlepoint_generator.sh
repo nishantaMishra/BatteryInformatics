@@ -95,25 +95,6 @@ fi
 # sys/POSCAR remains unchanged (already copied)
 echo "  sys/POSCAR ready (unchanged from original)"
 
-# Extract grid parameters from OUTCAR if it exists
-echo "Extracting grid parameters from OUTCAR..."
-outcar_path="OUTCAR"
-if [[ -f "$outcar_path" ]]; then
-    grid_info=$(grep "support grid" "$outcar_path" | head -1)
-    if [[ -n "$grid_info" ]]; then
-        ngxf=$(echo "$grid_info" | grep -o "NGXF=\s*[0-9]*" | grep -o "[0-9]*")
-        ngyf=$(echo "$grid_info" | grep -o "NGYF=\s*[0-9]*" | grep -o "[0-9]*")
-        ngzf=$(echo "$grid_info" | grep -o "NGZF=\s*[0-9]*" | grep -o "[0-9]*")
-        echo "  Found grid parameters: NGXF=$ngxf, NGYF=$ngyf, NGZF=$ngzf"
-    else
-        echo "  Warning: Could not find grid parameters in OUTCAR"
-        ngxf=""; ngyf=""; ngzf=""
-    fi
-else
-    echo "  Warning: OUTCAR not found, grid parameters will be empty"
-    ngxf=""; ngyf=""; ngzf=""
-fi
-
 # Create incar_modification.md template
 echo "Creating INCAR modification template..."
 cat > incar_modification.md << EOF
@@ -132,9 +113,12 @@ LCHARG = .TRUE.
 LVTOT = .TRUE.
 LORBIT = 11
 LAECHG = .TRUE.
-NGXF = $ngxf
-NGYF = $ngyf
-NGZF = $ngzf
+
+# Note: NGXF / NGYF / NGZF are NOT written automatically by this script.
+# If you need to set grid parameters, add them here explicitly, for example:
+# NGXF = 128
+# NGYF = 128
+# NGZF = 64
 
 # Add any additional INCAR modifications below:
 EOF
@@ -181,6 +165,22 @@ for dir in mol_in_slab_box surf sys; do
         echo "    $dir/INCAR modified successfully"
     else
         echo "    Warning: $dir/INCAR or incar_modification.md not found"
+    fi
+done
+
+# Clean up temporary files
+rm -f surf_atoms.tmp mol_atoms.tmp z_cutoff.tmp
+
+echo
+echo "=== Setup Complete ==="
+echo "Directories created:"
+echo "  - mol_in_slab_box/  (molecule + slab box)"
+echo "  - surf/             (surface atoms only)"
+echo "  - sys/              (complete system)"
+echo
+echo "All directories contain POSCAR, POTCAR, KPOINTS, and modified INCAR files."
+echo "INCAR modification template saved as incar_modification.md"
+echo "Ready for single point calculations!"
     fi
 done
 
