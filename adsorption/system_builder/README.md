@@ -18,7 +18,14 @@ Added features:
 
 # Known Issues
 
-Loaded tab still affects the other tabs.
-But, that's not a bug but a feature because the newly loaded structure is ready to be compared with the previous one.
+1. Loaded tab still affects the other tabs.
+But, that can be presented as a feature because the newly loaded structure is ready to be compared with the previous one.
 
-Currently, there is no way to close tabs. Just open a new instance of the program. Ctrl+W will be implemented in the future.
+2. Currently, there is no way to close tabs. Just open a new instance of the program. Ctrl+W will be implemented in the future.
+3. `ase_dragdrop_gui.py` could be moved inside the directory.
+
+# To do
+1. Make colour schemes work. Add interactive colour changing.
+2. Support for XDATCAR.
+3. Alignment of structure by clicking the axes. 
+
