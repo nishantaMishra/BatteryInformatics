@@ -91,3 +91,6 @@ print("Estimated grids:")
 print("  NGX, NGY, NGZ   = %3d  %3d  %3d" % tuple(NG))
 print("  NGXF,NGYF,NGZF  = %3d  %3d  %3d" % tuple(NGF))
 ```
+
+# Known Issues 
+- incar_modification.md is created inside the calculation directory instead of the root directory of folder. 
