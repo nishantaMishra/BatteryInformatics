@@ -123,6 +123,10 @@ class View:
         if self.config['swap_mouse']:
             self.b1 = 3
             self.b3 = 1
+        
+        # Track double right-click for pan mode toggle
+        self.last_right_click_time = 0
+        self.right_click_threshold = 300  # milliseconds for double-click
 
     @property
     def atoms(self):
@@ -690,6 +694,24 @@ class View:
     def release(self, event):
         if event.button in [4, 5]:
             self.scroll_event(event)
+            return
+
+        # Handle double right-click to toggle pan mode
+        if event.button == self.b3:
+            # Check if this is a double-click (second click within threshold)
+            if event.time < self.last_right_click_time + self.right_click_threshold:
+                # Double right-click detected - toggle pan mode ON/OFF
+                # First double-click: enables panning (cursor becomes hand 🖐️)
+                # Second double-click: disables panning (cursor returns to normal 🖱️)
+                try:
+                    self.toggle_pan_mode()
+                except Exception:
+                    pass
+                self.last_right_click_time = 0  # Reset counter for next sequence
+                return
+            else:
+                # First click in new sequence - record timestamp for double-click detection
+                self.last_right_click_time = event.time
             return
 
         if event.button != self.b1:

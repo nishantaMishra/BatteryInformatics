@@ -1936,7 +1936,12 @@ class GUI(View):
                 self._pan_undo_recorded = False
             except Exception:
                 pass
-            return
+            # Still check for double right-click to exit pan mode
+            # Call parent's release to handle double-click detection
+            try:
+                return super().release(event)
+            except Exception:
+                return None
         try:
             return super().release(event)
         except Exception:
