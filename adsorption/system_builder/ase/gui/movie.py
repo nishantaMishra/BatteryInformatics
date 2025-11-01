@@ -49,6 +49,9 @@ class Movie:
     def close(self):
         self.stop()
         self.win.close()
+        # Clear the GUI's reference to this movie window so it can be reopened
+        if self.gui.movie_window is self:
+            self.gui.movie_window = None
 
     def click(self, step, firstlast=False):
         if firstlast and step < 0:

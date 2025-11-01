@@ -4,6 +4,7 @@ from math import cos, sin, sqrt
 from os.path import basename
 
 import numpy as np
+import time
 
 from ase.calculators.calculator import PropertyNotImplementedError
 from ase.data import atomic_numbers
@@ -20,6 +21,11 @@ from ase.utils import rotate
 GREEN = '#74DF00'
 PURPLE = '#AC58FA'
 BLACKISH = '#151515'
+
+# Gizmo visual tuning constants
+GIZMO_LENGTH = 32        # length of each axis handle in pixels
+GIZMO_PADDING = 22       # distance from left/bottom edges to gizmo origin
+GIZMO_HANDLE_R = 6       # radius of axis handle in pixels
 
 
 def get_cell_coordinates(cell, shifted=False):
@@ -606,17 +612,75 @@ class View:
         line((x2, y2, end[0], end[1]), width)
 
     def draw_axes(self):
-        axes_length = 15
+        """Draw the small axis gizmo in the bottom-left and register
+        clickable handles for each axis.
 
-        rgb = ['red', 'green', 'blue']
+        We draw a line from the gizmo origin to the axis end and a small
+        circular handle at the end. The screen positions of the handles are
+        stored in self._gizmo_handles as tuples (x, y, label, i, zcomp)
+        so mouse events can hit-test them.
+        """
+
+        axes_length = GIZMO_LENGTH
+        rgb = ['#ff5252', '#4caf50', '#4d78ff']
+
+        # origin of the gizmo in screen coords
+        a = GIZMO_PADDING
+        b = self.window.size[1] - GIZMO_PADDING
+
+        # Prepare handle list for hit-testing in mouse events
+        self._gizmo_handles = []
 
         for i in self.axes[:, 2].argsort():
-            a = 20
-            b = self.window.size[1] - 20
             c = int(self.axes[i][0] * axes_length + a)
             d = int(-self.axes[i][1] * axes_length + b)
-            self.window.line((a, b, c, d))
-            self.window.text(c, d, 'XYZ'[i], color=rgb[i])
+
+            # line from origin to axis end (thin)
+            try:
+                self.window.line((a, b, c, d), width=1)
+            except TypeError:
+                self.window.line((a, b, c, d))
+
+            # draw small circular handle at the axis end
+            r = GIZMO_HANDLE_R
+            # fill the handle lightly if it points towards the viewer
+            zcomp = float(self.axes[i][2])
+            # highlight if hovered
+            hover_index = getattr(self, '_gizmo_hover', None)
+            is_hover = (hover_index == i)
+            if is_hover:
+                fill = '#ffd880'
+                outline = '#ff8800'
+            else:
+                if zcomp > 0:
+                    fill = '#dddddd'
+                else:
+                    fill = '#ffffff'
+                outline = None
+
+            # window.circle(fill, selected, x0, y0, x1, y1)
+            try:
+                # Some window backends expect boolean selected arg; pass False
+                self.window.circle(fill, False, c - r, d - r, c + r, d + r)
+            except TypeError:
+                # Fallback for backends with different signature
+                self.window.circle(fill, c - r, d - r, c + r, d + r)
+
+            # draw an outline for hover state if available
+            if is_hover:
+                try:
+                    self.window.line((c - r, d - r, c + r, d - r), width=1)
+                    self.window.line((c + r, d - r, c + r, d + r), width=1)
+                    self.window.line((c + r, d + r, c - r, d + r), width=1)
+                    self.window.line((c - r, d + r, c - r, d - r), width=1)
+                except Exception:
+                    pass
+
+            # axis label placed with extra offset to avoid overlap
+            self.window.text(c + r + 8, d - 2, 'XYZ'[i], color=rgb[i])
+
+            # store for hit-testing: (x, y, label, axis_index, z_component)
+            self._gizmo_handles.append((c, d, 'XYZ'[i], i, zcomp))
 
     def draw_frame_number(self):
         x, y = self.window.size
@@ -630,6 +694,41 @@ class View:
 
         if event.button != self.b1:
             return
+
+        # Check whether user clicked on the axis gizmo handles.
+        # If so, realign the view to that Cartesian axis and consume the
+        # event (do not perform atom selection). Animate the rotation.
+        if hasattr(self, '_gizmo_handles') and self._gizmo_handles:
+            # hit radius in pixels
+            hit_r = 10
+            ex = int(event.x)
+            ey = int(event.y)
+            for (hx, hy, label, axis_i, zcomp) in self._gizmo_handles:
+                dx = ex - int(hx)
+                dy = ey - int(hy)
+                if dx * dx + dy * dy <= hit_r * hit_r:
+                    # map z-component sign to positive/negative axis
+                    if zcomp > 0:
+                        key = label
+                    else:
+                        key = f'Shift+{label}'
+
+                    # compute target axes without changing state
+                    try:
+                        target_axes = self.axes_for_key(key)
+                    except Exception:
+                        # fallback: use set_view directly
+                        self._push_undo_for_view_change()
+                        self.set_view(key)
+                        return
+
+                    # animate to the new axes and then set frame (and notify)
+                    self._push_undo_for_view_change()
+                    self.animate_to_axes(target_axes, steps=12, delay_ms=15)
+                    # ensure final state and update frame
+                    self.axes = target_axes
+                    self.set_frame()
+                    return
 
         selected = self.images.selected
         selected_ordered = self.images.selected_ordered
@@ -692,6 +791,27 @@ class View:
         x = event.x
         y = event.y
         x0, y0 = self.xy
+        # Update gizmo hover when mouse moves and no button is pressed
+        if getattr(self, 'button', None) is None:
+            if hasattr(self, '_gizmo_handles') and self._gizmo_handles:
+                ex = int(x)
+                ey = int(y)
+                hit_r = 10
+                hover = None
+                for (_hx, _hy, _label, axis_i, _z) in self._gizmo_handles:
+                    dx = ex - int(_hx)
+                    dy = ey - int(_hy)
+                    if dx * dx + dy * dy <= hit_r * hit_r:
+                        hover = axis_i
+                        break
+                if hover != getattr(self, '_gizmo_hover', None):
+                    self._gizmo_hover = hover
+                    # redraw to show hover highlight
+                    try:
+                        self.draw(status=False)
+                    except Exception:
+                        pass
+
         if self.button == self.b1:
             x0 = int(round(x0))
             y0 = int(round(y0))
@@ -733,6 +853,74 @@ class View:
 
     def render_window(self):
         return Render(self)
+
+    def axes_for_key(self, key):
+        """Return an axes (3x3) matrix corresponding to the given key
+        without mutating viewer state. Mirrors the logic in set_view.
+        """
+        if key == 'Z':
+            return rotate('0.0x,0.0y,0.0z')
+        elif key == 'X':
+            return rotate('-90.0x,-90.0y,0.0z')
+        elif key == 'Y':
+            return rotate('90.0x,0.0y,90.0z')
+        elif key == 'Shift+Z':
+            return rotate('180.0x,0.0y,90.0z')
+        elif key == 'Shift+X':
+            return rotate('0.0x,90.0y,0.0z')
+        elif key == 'Shift+Y':
+            return rotate('-90.0x,0.0y,0.0z')
+        else:
+            # I/J/K mapping: compute from cell
+            if key == 'I':
+                i, j = 1, 2
+            elif key == 'J':
+                i, j = 2, 0
+            elif key == 'K':
+                i, j = 0, 1
+            elif key == 'Shift+I':
+                i, j = 2, 1
+            elif key == 'Shift+J':
+                i, j = 0, 2
+            elif key == 'Shift+K':
+                i, j = 1, 0
+            else:
+                raise ValueError('Unknown view key: %r' % (key,))
+
+            A = complete_cell(self.atoms.cell)
+            x1 = A[i]
+            x2 = A[j]
+
+            norm = np.linalg.norm
+
+            x1 = x1 / norm(x1)
+            x2 = x2 - x1 * np.dot(x1, x2)
+            x2 /= norm(x2)
+            x3 = np.cross(x1, x2)
+
+            return np.array([x1, x2, x3]).T
+
+    def animate_to_axes(self, target_axes, steps=10, delay_ms=20):
+        """Animate self.axes from current to target over `steps` frames.
+
+        A simple linear interpolation of matrix elements followed by
+        orthonormalization (SVD/polar) is used which provides a smooth
+        visual transition without adding heavy dependencies.
+        This function blocks briefly while animating.
+        """
+        start = np.array(self.axes)
+        for s in range(1, steps + 1):
+            t = s / float(steps)
+            M = (1 - t) * start + t * target_axes
+            # orthonormalize via SVD (closest rotation)
+            U, _, Vt = np.linalg.svd(M)
+            R = np.dot(U, Vt)
+            self.axes = R
+            try:
+                self.draw(status=False)
+            except Exception:
+                pass
+            time.sleep(delay_ms / 1000.0)
 
     def resize(self, event):
         w, h = self.window.size

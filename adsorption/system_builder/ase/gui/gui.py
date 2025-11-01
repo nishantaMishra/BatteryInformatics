@@ -328,6 +328,7 @@ class GUI(View):
 
     def movie(self):
         from ase.gui.movie import Movie
+        # Always create a new movie window - it will be properly initialized
         self.movie_window = Movie(self)
 
     def plot_graphs(self, key=None, expr=None, ignore_if_nan=False):
@@ -454,6 +455,14 @@ class GUI(View):
             self.window.win.focus_force()
         except Exception:
             pass
+
+        # Auto-open movie player if this is a VASP XDATCAR trajectory
+        if len(self.images) > 1 and 'xdatcar' in filename.lower():
+            try:
+                if self.movie_window is None:
+                    self.movie()
+            except Exception:
+                pass
 
     def switch_tab(self, tab_id):
         """Switch to the specified tab."""
@@ -1266,11 +1275,6 @@ class GUI(View):
                 self.images.selected[:] = ~(np.abs(R - R0) > 1.0e-10).any(1)
         self.draw()
 
-    def movie(self):
-        from ase.gui.movie import Movie
-        self.movie_window = Movie(self)
-
-    def plot_graphs(self, key=None, expr=None, ignore_if_nan=False):
         from ase.gui.graphs import Graphs
         g = Graphs(self)
         if expr is not None:
@@ -1328,72 +1332,6 @@ class GUI(View):
         bandpath = cell.bandpath(npoints=0)
         return self.pipe('reciprocal', bandpath)
 
-    def add_tab(self, filename, images):
-        """Add a new tab with the filename as the title and associated Images."""
-        # Save current tab view/selection before switching, so it doesn't get
-        # reset when a new tab is added.
-        if self.current_tab is not None and self.current_tab in self.tabs:
-            try:
-                self.tab_view_settings[self.current_tab] = {
-                    'scale': self.scale,
-                    'center': self.center.copy(),
-                    'axes': self.axes.copy()
-                }
-            except Exception:
-                # Be lenient if any attribute is missing
-                self.tab_view_settings[self.current_tab] = {
-                    'scale': getattr(self, 'scale', 1.0),
-                    'center': getattr(self, 'center', np.zeros(3)).copy(),
-                    'axes': getattr(self, 'axes', np.eye(3)).copy()
-                }
-            if hasattr(self, 'images') and hasattr(self.images, 'selected'):
-                self.tab_selection_state[self.current_tab] = self.images.selected.copy()
-
-        if not isinstance(images, Images):
-            images = Images(images)
-
-        # Ensure this Images object has its own independent selection array
-        if hasattr(images, 'selected'):
-            images.selected = np.zeros(len(images.selected), bool)
-
-        tab_title = filename.split('/')[-1]  # Extract the file name from the path
-        # Pass full filepath so the TabControl can show it on hover
-        tab_id = self.tab_control.add_tab(tab_title, filepath=filename)
-        self.tabs[tab_id] = images
-
-        # Make the new tab current and associate a view for it (inherit current
-        # GUI view so the new tab starts with the same view but remains independent).
-        self.current_tab = tab_id
-        self.images = images
-
-        try:
-            self.tab_view_settings[tab_id] = {
-                'scale': self.scale,
-                'center': self.center.copy(),
-                'axes': self.axes.copy()
-            }
-        except Exception:
-            self.tab_view_settings[tab_id] = {
-                'scale': getattr(self, 'scale', 1.0),
-                'center': getattr(self, 'center', np.zeros(3)).copy(),
-                'axes': getattr(self, 'axes', np.eye(3)).copy()
-            }
-
-        # Initialize selection state for this tab
-        self.tab_selection_state[tab_id] = images.selected.copy()
-
-        # Now set frame and redraw (the switch_tab logic restores settings when
-        # switching between already added tabs; for a freshly added tab we keep
-        # the inherited view we stored above).
-        self.set_frame(len(self.images) - 1, focus=True)
-        self.draw()
-        
-        # Ensure the main window has focus after adding a new tab
-        # This is critical for arrow key functionality
-        try:
-            self.window.win.focus_force()
-        except Exception:
-            pass
 
     def switch_tab(self, tab_id):
         """Switch to the specified tab."""
