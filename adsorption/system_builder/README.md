@@ -12,20 +12,16 @@ Added features:
 - Multiple tabs support
 - Opens native file browser dialogs for loading and saving files.
 - Presets for view configurations. I, J and K.
-- Panning with keypress "P"  
+- Panning with keypress "P"  (Double right click to trigger panning.)
 - Supports undo/redo of atom movements with Ctrl+Z / Ctrl+Y
-- Tab location on hoverng the tab bar.
+- Tab location on hovering the tab bar.
+- Support for XDATCAR.
+- Axes gizmo: Alignment of structure by clicking the axes.
+- Ctrl+W to close tab.
 
 # Known Issues
-
-1. Loaded tab still affects the other tabs.
-But, that can be presented as a feature because the newly loaded structure is ready to be compared with the previous one.
-
-2. Currently, there is no way to close tabs. Just open a new instance of the program. Ctrl+W will be implemented in the future.
-3. `ase_dragdrop_gui.py` could be moved inside the directory.
+1. `ase_dragdrop_gui.py` could be moved inside the directory.
 
 # To do
 1. Make colour schemes work. Add interactive colour changing.
-2. Support for XDATCAR.
-3. Alignment of structure by clicking the axes. 
 
