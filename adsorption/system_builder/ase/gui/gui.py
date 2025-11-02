@@ -524,6 +524,79 @@ class GUI(View):
             except Exception:
                 pass
 
+    def close_tab(self, key=None):
+        """Close a tab. If tab_id is None, close the currently active tab."""
+        tab_id = self.current_tab
+        
+        if tab_id is None or tab_id not in self.tabs:
+            return False
+        
+        # Check if the tab has been modified
+        is_modified = getattr(self, f'_tab_modified_{tab_id}', False)
+        
+        if is_modified:
+            # Prompt user to save
+            from ase.gui.ui import Dialog
+            from ase.gui.i18n import _
+            
+            # Get the tab title for display
+            tab_title = self.tab_control.tabs.get(tab_id, 'Untitled') if hasattr(self.tab_control, 'tabs') else 'Untitled'
+            
+            response = Dialog(
+                _('Unsaved changes'),
+                _('Do you want to save changes to {}?\n\nUnsaved changes will be lost.').format(tab_title),
+                buttons=[_('Save'), _('Discard'), _('Cancel')]
+            ).run()
+            
+            if response == _('Cancel'):
+                return False  # Don't close
+            elif response == _('Save'):
+                # Save the tab's content
+                try:
+                    # Switch to this tab first
+                    if self.current_tab != tab_id:
+                        self.switch_tab(tab_id)
+                    # Save the file
+                    self.save()
+                    # Clear the modified flag
+                    setattr(self, f'_tab_modified_{tab_id}', False)
+                except Exception as e:
+                    print(f"Error saving tab: {e}")
+                    return False
+            # If response is 'Discard', just continue to close
+        
+        # Remove the tab
+        try:
+            # Check if this is the last tab
+            remaining_tabs = [tid for tid in self.tabs.keys() if tid != tab_id]
+            
+            # Switch to another tab if this was the active tab
+            if self.current_tab == tab_id:
+                if remaining_tabs:
+                    # Switch to the first remaining tab
+                    self.switch_tab(remaining_tabs[0])
+                else:
+                    # No more tabs - exit the application
+                    self.exit()
+                    return True
+            
+            # Remove from tracking dictionaries
+            del self.tabs[tab_id]
+            if tab_id in self.tab_view_settings:
+                del self.tab_view_settings[tab_id]
+            if tab_id in self.tab_selection_state:
+                del self.tab_selection_state[tab_id]
+            if hasattr(self, f'_tab_modified_{tab_id}'):
+                delattr(self, f'_tab_modified_{tab_id}')
+            
+            # Remove from tab control
+            self.tab_control.remove_tab(tab_id)
+            
+            return True
+        except Exception as e:
+            print(f"Error closing tab: {e}")
+            return False
+
     def open(self, button=None, filename=None):
         # Prefer the native OS file dialog when available for a familiar
         # experience. Fall back to the bundled ASEFileChooser if needed.
@@ -793,6 +866,7 @@ class GUI(View):
              [M(_('_Open'), self.open, 'Ctrl+O'),
               M(_('_New'), self.new, 'Ctrl+N'),
               M(_('_Save'), self.save, 'Ctrl+S'),
+              M(_('_Close Tab'), self.close_tab, 'Ctrl+W'),
               M('---'),
               M(_('_Quit'), self.exit, 'Ctrl+Q')]),
 
@@ -903,7 +977,7 @@ class GUI(View):
               M(_('NE_B plot'), self.neb),
               M(_('B_ulk Modulus'), self.bulk_modulus),
               M(_('Reciprocal space ...'), self.reciprocal),
-              M(_('Wrap atoms'), self.wrap_atoms, 'Ctrl+W')]),
+              M(_('Wrap atoms'), self.wrap_atoms, 'Ctrl+Shift+W')]),
 
             # TRANSLATORS: Set up (i.e. build) surfaces, nanoparticles, ...
             (_('_Setup'),
@@ -1662,6 +1736,7 @@ class GUI(View):
              [M(_('_Open'), self.open, 'Ctrl+O'),
               M(_('_New'), self.new, 'Ctrl+N'),
               M(_('_Save'), self.save, 'Ctrl+S'),
+              M(_('_Close Tab'), self.close_tab, 'Ctrl+W'),
               M('---'),
               M(_('_Quit'), self.exit, 'Ctrl+Q')]),
 
@@ -1772,7 +1847,7 @@ class GUI(View):
               M(_('NE_B plot'), self.neb),
               M(_('B_ulk Modulus'), self.bulk_modulus),
               M(_('Reciprocal space ...'), self.reciprocal),
-              M(_('Wrap atoms'), self.wrap_atoms, 'Ctrl+W')]),
+              M(_('Wrap atoms'), self.wrap_atoms, 'Ctrl+Shift+W')]),
 
             # TRANSLATORS: Set up (i.e. build) surfaces, nanoparticles, ...
             (_('_Setup'),

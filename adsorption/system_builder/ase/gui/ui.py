@@ -964,3 +964,30 @@ class TabControl(Widget):
                 pass
             self._tooltip = None
         self._current_hover_index = None
+
+    def remove_tab(self, tab_id):
+        """Remove a tab by its tab_id."""
+        if tab_id not in self.tabs:
+            return False
+        
+        try:
+            frame = self.tabs[tab_id]
+            # Get the tab index in the notebook
+            tab_index = None
+            for i in range(self.notebook.index("end")):
+                if self.notebook.nametowidget(self.notebook.tabs()[i]) == frame:
+                    tab_index = i
+                    break
+            
+            if tab_index is not None:
+                self.notebook.forget(tab_index)
+            
+            # Clean up internal tracking
+            del self.tabs[tab_id]
+            if tab_id in self.filepaths:
+                del self.filepaths[tab_id]
+            
+            return True
+        except Exception as e:
+            print(f"Error removing tab: {e}")
+            return False
