@@ -34,7 +34,15 @@ import numpy as np
 import matplotlib.font_manager as fm
 
 # Add this near the top after imports
-plt.rcParams['font.family'] = ['Noto Sans Devanagari', 'DejaVu Sans']
+desired_fonts = ['Noto Sans Devanagari', 'DejaVu Sans']
+installed_font_names = {f.name.lower() for f in fm.fontManager.ttflist}
+valid_fonts = [f for f in desired_fonts if f.lower() in installed_font_names]
+
+if not valid_fonts:
+    # Ensure at least a safe default to avoid "Font Family ... not found." messages
+    valid_fonts = ['DejaVu Sans']
+
+plt.rcParams['font.family'] = valid_fonts
 
 # Bandgap detection functions adapted from TDOS5.py
 def is_zero(x, tol=1e-5):
@@ -597,119 +605,4 @@ def main():
                 # Extract spin filter, fill option, --colour flag, and cutoff
                 filtered_tokens = []
                 use_all_elements = False
-                all_orbitals = ['s', 'p', 'd']  # default orbitals for 'all'
-                use_interactive_colors = False
-                color_scheme = None
-                show_grid = False
-                show_ylabel = False  # Default: hide y-axis labels
-                i = 0
-                while i < len(tokens):
-                    token = tokens[i]
-                    if token.lower() in ['up', 'down', 'dw', '--up', '--down', '--dw']:
-                        spin_filter = 'DOWN' if token.lower() in ['dw', '--dw'] else token.upper().replace('--', '')
-                    elif token.lower() in ['fill', 'gridfill', '--fill', '--gridfill']:
-                        fill = True
-                    elif token.lower() in ['colour', '--colour', 'color', '--color', '-c']:
-                        # Check if next token is a color scheme
-                        available_schemes = get_available_schemes()
-                        if i + 1 < len(tokens) and tokens[i + 1].lower() in available_schemes:
-                            color_scheme = tokens[i + 1].lower()
-                            i += 1  # Skip the scheme name
-                        else:
-                            use_interactive_colors = True
-                    elif token.lower() == 'all':
-                        use_all_elements = True
-                        # Check if 'all' is followed by specific orbitals
-                        j = i + 1
-                        temp_orbitals = []
-                        valid_orbitals = ['s', 'p', 'd', 'py', 'pz', 'px', 'dxy', 'dyz', 'dz2', 'dxz', 'dx2', 'tot']
-                        while j < len(tokens) and tokens[j].lower() in valid_orbitals:
-                            temp_orbitals.append(tokens[j].lower())
-                            j += 1
-                        if temp_orbitals:
-                            all_orbitals = temp_orbitals
-                            i = j - 1  # Adjust index to skip processed orbital tokens
-                    elif token.lower() in ['--grid', 'grid']:
-                        show_grid = True
-                    elif token.lower() == '--cutoff' and i + 1 < len(tokens):
-                        try:
-                            cutoff = float(tokens[i + 1])
-                            i += 1  # Skip the next token as it's the cutoff value
-                        except ValueError:
-                            print("Invalid cutoff value. Ignoring.")
-                    elif token.lower().startswith('cutoff='):
-                        try:
-                            cutoff = float(token.split('=')[1])
-                        except ValueError:
-                            print("Invalid cutoff value. Ignoring.")
-                    elif token.lower() in ['-y', '--ylabel']:
-                        show_ylabel = True
-                    else:
-                        filtered_tokens.append(token)
-                    i += 1
-
-                plotting_input = ' '.join(filtered_tokens)
-
-                # Handle all option
-                if use_all_elements:
-                    # Plot all available elements with specified orbitals
-                    plotting_info = {}
-                    for element in pdos_files.keys():
-                        plotting_info[element] = all_orbitals
-
-                # Parse plotting info and inline colors
-                for info in plotting_input.split(','):
-                    parts = info.strip().split()
-                    if parts:
-                        if len(parts) == 1 and parts[0] == 'tot':
-                            # Standalone 'tot' means plot TDOS
-                            plotting_info['tot'] = []
-                        else:
-                            element = parts[0]
-                            orbitals = []
-                            
-                            # Check if last part is a color
-                            color = None
-                            if len(parts) > 1:
-                                potential_color = parse_color_input(parts[-1])
-                                if potential_color:
-                                    color = potential_color
-                                    orbitals = parts[1:-1]  # Exclude color from orbitals
-                                else:
-                                    orbitals = parts[1:]    # No color, all are orbitals
-                            
-                            plotting_info[element] = orbitals
-                            if color:
-                                fill_colors[element] = color
-
-                # Check if TDOS is requested and file exists
-                plot_tdos_requested = 'tot' in plotting_info and not plotting_info['tot']
-                if plot_tdos_requested:
-                    tdos_path = os.path.join(location, 'TDOS.dat')
-                    if not os.path.exists(tdos_path):
-                        print("TDOS.dat not found. Attempting to generate it...")
-                        if try_generate_tdos_dat_file(location):
-                            print("TDOS.dat generated successfully.")
-                        else:
-                            print("Failed to generate TDOS.dat. TDOS plotting may not work.")
-
-                # Interactive color selection if --colour flag is used
-                if use_interactive_colors:
-                    interactive_colors = get_fill_colors(plotting_info.keys(), plotting_info)
-                    # Merge with inline colors, giving priority to interactive selection
-                    fill_colors.update(interactive_colors)
-                elif color_scheme:
-                    scheme_colors = apply_color_scheme(plotting_info.keys(), plotting_info, color_scheme)
-                    # Merge with inline colors, giving priority to inline colors
-                    scheme_colors.update(fill_colors)
-                    fill_colors = scheme_colors
-
-                # Pass fill_colors and cutoff to plot_pdos
-                plot_pdos(pdos_files, plotting_info, title, spin_filter, fill, location, fill_colors, cutoff, show_grid, show_ylabel)
-
-            except Exception as e:
-                print(f"Error: {e}")
-                continue
-
-if __name__ == "__main__":
-    main()
+                all_orbitals = ['s', 'p', 'd'
