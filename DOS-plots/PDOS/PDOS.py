@@ -32,6 +32,7 @@ import subprocess
 import matplotlib.pyplot as plt
 import numpy as np
 import matplotlib.font_manager as fm
+import argparse
 
 # supress the warmings
 desired_fonts = ['Noto Sans Devanagari', 'DejaVu Sans']
@@ -407,6 +408,10 @@ def show_help():
 ║                            PDOS & TDOS Plotter Help                         ║
 ╚══════════════════════════════════════════════════════════════════════════════╝
 
+🚀 PROGRAM USAGE:
+   • Run in current directory:  python PDOS.py
+   • Specify directory:         python PDOS.py /path/to/directory
+   
 📁 SETUP:
    • Place this script in a directory containing VASP output files
    • Required files: INCAR, DOSCAR, PROCAR (for auto-generation)
@@ -534,7 +539,6 @@ def show_help():
    • Global options apply to entire plot: all p d fill --colour vesta
 
 ⚙️ SPECIAL COMMANDS:
-   • '0'    : Change directory
    • 'help' : Show this help message
    • Ctrl+D : Exit the program
 
@@ -558,51 +562,162 @@ def show_help():
 """)
 
 def main():
-    while True:
-        while True:
-            location = input_with_completion("Enter the directory path where PDOS files exist: ").strip()
-
-            if not os.path.isdir(location):
-                print("Not a directory. Try again.")
-                continue
-
+    # Parse command-line arguments
+    parser = argparse.ArgumentParser(description='PDOS and TDOS plotter for VASP calculations')
+    parser.add_argument('directory', nargs='?', default=os.getcwd(),
+                        help='Directory path where PDOS files exist (default: current directory)')
+    args = parser.parse_args()
+    
+    location = os.path.abspath(args.directory)
+    
+    # Validate directory
+    if not os.path.isdir(location):
+        print(f"Error: '{location}' is not a valid directory.")
+        sys.exit(1)
+    
+    # Try to read or generate PDOS files
+    pdos_files = read_pdos_files(location)
+    if not pdos_files:
+        generated = try_generate_pdos_dat_files(location)
+        if generated:
             pdos_files = read_pdos_files(location)
-            if not pdos_files:
-                generated = try_generate_pdos_dat_files(location)
-                if (generated):
-                    pdos_files = read_pdos_files(location)
+    
+    if not pdos_files:
+        print(f"Error: No PDOS files found in '{location}' and could not generate them.")
+        print("Required files: INCAR, DOSCAR, PROCAR")
+        sys.exit(1)
+    
+    last_dirs = os.path.normpath(location).split(os.sep)[-4:]
+    title = os.path.join(*last_dirs)
+    
+    print(f"Working in directory: {location}")
+    print("PDOS files found for elements:", ", ".join(pdos_files.keys()))
+    
+    while True:
+        plotting_input = input("Enter plotting info (or 'help' for help, Ctrl+D to exit): ").strip()
 
-            if not pdos_files:
-                print("Still no PDOS files. Please try a different directory.")
-                continue
+        if plotting_input.lower() == 'help':
+            show_help()
+            continue
 
+        try:
+            plotting_info = {}
+            spin_filter = None
+            fill = False
+            use_interactive_colors = False
+            fill_colors = {}
+            cutoff = None
+            show_grid = False
+            tokens = plotting_input.split()
+
+            # Extract spin filter, fill option, --colour flag, and cutoff
+            filtered_tokens = []
+            use_all_elements = False
+            all_orbitals = ['s', 'p', 'd']
+            color_scheme = None
+
+            for token in tokens:
+                token_upper = token.upper()
+                if token_upper in ['UP', '--UP']:
+                    spin_filter = 'UP'
+                elif token_upper in ['DOWN', '--DOWN', 'DW', '--DW']:
+                    spin_filter = 'DOWN'
+                elif token.lower() in ['fill', '--fill', 'gridfill', '--gridfill']:
+                    fill = True
+                elif token.lower() in ['--colour', '--color', 'colour', 'color', '-c']:
+                    use_interactive_colors = True
+                elif token.startswith('--cutoff'):
+                    try:
+                        cutoff = float(token.split('=')[1] if '=' in token else tokens[tokens.index(token) + 1])
+                    except (IndexError, ValueError):
+                        print("Invalid cutoff value. Ignoring.")
+                elif token.startswith('cutoff='):
+                    try:
+                        cutoff = float(token.split('=')[1])
+                    except ValueError:
+                        print("Invalid cutoff value. Ignoring.")
+                elif token.lower() in ['--grid', 'grid']:
+                    show_grid = True
+                elif token.lower() in ['-c', '--colour', '--color'] and tokens.index(token) + 1 < len(tokens):
+                    next_token = tokens[tokens.index(token) + 1]
+                    if next_token.lower() in get_available_schemes():
+                        color_scheme = next_token.lower()
+                else:
+                    filtered_tokens.append(token)
+
+            # Process 'all' keyword
+            if filtered_tokens and filtered_tokens[0].lower() == 'all':
+                use_all_elements = True
+                filtered_tokens = filtered_tokens[1:]
+                
+                # Check if specific orbitals are provided after 'all'
+                temp_orbitals = []
+                for t in filtered_tokens:
+                    if t.lower() in ['s', 'p', 'd', 'py', 'pz', 'px', 'dxy', 'dyz', 'dz2', 'dxz', 'dx2', 'tot']:
+                        temp_orbitals.append(t.lower())
+                    elif t == ',':
+                        break
+                
+                if temp_orbitals:
+                    all_orbitals = temp_orbitals
+                    filtered_tokens = [t for t in filtered_tokens if t not in temp_orbitals]
+
+            # Parse elements and orbitals
+            if use_all_elements:
+                for element in pdos_files.keys():
+                    plotting_info[element] = all_orbitals
+            else:
+                segments = ' '.join(filtered_tokens).split(',')
+                for segment in segments:
+                    parts = segment.strip().split()
+                    if not parts:
+                        continue
+                    
+                    if parts[0].lower() == 'tot' and len(parts) == 1:
+                        plotting_info['tot'] = []
+                        continue
+                    
+                    element = parts[0]
+                    orbitals = []
+                    inline_color = None
+                    
+                    for part in parts[1:]:
+                        if part.lower() in ['s', 'p', 'd', 'py', 'pz', 'px', 'dxy', 'dyz', 'dz2', 'dxz', 'dx2', 'tot']:
+                            orbitals.append(part.lower())
+                        else:
+                            parsed_color = parse_color_input(part)
+                            if parsed_color:
+                                inline_color = parsed_color
+                    
+                    if element in pdos_files or element.lower() == 'tot':
+                        plotting_info[element] = orbitals if orbitals else ['s', 'p', 'd']
+                        if inline_color:
+                            fill_colors[element] = inline_color
+
+            # Apply color scheme if specified
+            if color_scheme and not use_interactive_colors:
+                scheme_colors = apply_color_scheme(list(pdos_files.keys()), plotting_info, color_scheme)
+                for elem, color in scheme_colors.items():
+                    if elem not in fill_colors:  # Don't override inline colors
+                        fill_colors[elem] = color
+
+            # Interactive color selection
+            if use_interactive_colors and not color_scheme:
+                fill_colors.update(get_fill_colors(list(pdos_files.keys()), plotting_info))
+
+            if plotting_info:
+                plot_pdos(pdos_files, plotting_info, title, spin_filter, fill, location, fill_colors, cutoff, show_grid)
+            else:
+                print("No valid plotting info provided.")
+
+        except KeyboardInterrupt:
+            print("\nExiting...")
             break
+        except EOFError:
+            print("\nExiting...")
+            break
+        except Exception as e:
+            print(f"Error: {e}")
 
-        last_dirs = os.path.normpath(location).split(os.sep)[-4:]
-        title = os.path.join(*last_dirs)
-
-        print("PDOS files found for elements:", ", ".join(pdos_files.keys()))
-
-        while True:
-            plotting_input = input("Enter plotting info (or '0' to change directory, 'help' for help): ").strip()
-
-            if plotting_input == '0':
-                break
-            elif plotting_input.lower() == 'help':
-                show_help()
-                continue
-
-            try:
-                plotting_info = {}
-                spin_filter = None
-                fill = False
-                use_interactive_colors = False
-                fill_colors = {}
-                cutoff = None
-                show_grid = False
-                tokens = plotting_input.split()
-
-                # Extract spin filter, fill option, --colour flag, and cutoff
-                filtered_tokens = []
-                use_all_elements = False
-                all_orbitals = ['s', 'p', 'd'
+if __name__ == "__main__":
+    main()
