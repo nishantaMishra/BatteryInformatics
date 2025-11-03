@@ -21,8 +21,23 @@ def install_dependency(dependency):
         print(f"Failed to install {dependency}. Please install it manually.")
 
 # Auto-install required libraries
-for pkg in ["matplotlib", "numpy", "pyyaml"]:
-    check_dependency(pkg)
+dependencies = {
+    "matplotlib": "matplotlib",
+    "numpy": "numpy",
+    "yaml": "pyyaml",  # Module name: package name
+    "h5py": "h5py"  # Optional: for HDF5 file support
+}
+
+for module_name, package_name in dependencies.items():
+    try:
+        importlib.import_module(module_name)
+    except ImportError:
+        if module_name == "h5py":
+            print(f"Warning: {package_name} is not installed. HDF5 support will be unavailable.")
+            print(f"Install it with: pip install {package_name}")
+        else:
+            print(f"{package_name} is not installed. Installing...")
+            install_dependency(package_name)
 
 #-------- Imports -----------
 import os
@@ -33,6 +48,13 @@ import matplotlib.pyplot as plt
 import numpy as np
 import matplotlib.font_manager as fm
 import argparse
+
+# Try importing h5py for HDF5 support
+try:
+    import h5py
+    HAS_H5PY = True
+except ImportError:
+    HAS_H5PY = False
 
 # supress the warmings
 desired_fonts = ['Noto Sans Devanagari', 'DejaVu Sans']
@@ -223,7 +245,13 @@ def try_generate_pdos_dat_files(location):
     return False
 
 def read_tdos_file(location):
-    """Read TDOS.dat file similar to TDOS5.py"""
+    """Read TDOS.dat file similar to TDOS5.py, with HDF5 fallback"""
+    # First try to read from HDF5 if available
+    tdos_energy, tdos_up, tdos_down = read_tdos_from_hdf5(location)
+    if tdos_energy is not None:
+        return tdos_energy, tdos_up, tdos_down
+    
+    # Fall back to reading TDOS.dat
     tdos_path = os.path.join(location, 'TDOS.dat')
     try:
         data = np.loadtxt(tdos_path)
@@ -242,6 +270,93 @@ def read_tdos_file(location):
         return energy, tdos_up, tdos_down
     except Exception as e:
         print(f"Warning: Could not read TDOS.dat: {e}")
+        return None, None, None
+
+def read_pdos_from_hdf5(location):
+    """Read PDOS data from vaspout.h5 file and convert to compatible format"""
+    if not HAS_H5PY:
+        print("Warning: h5py is not installed. Cannot read HDF5 files.")
+        return None, None
+    
+    h5file_path = os.path.join(location, 'vaspout.h5')
+    if not os.path.isfile(h5file_path):
+        return None, None
+    
+    try:
+        print(f"Found vaspout.h5. Reading PDOS data from HDF5 file...")
+        
+        with h5py.File(h5file_path, 'r') as h5file:
+            # Read energies and Fermi level
+            energies = h5file['results/electron_dos/energies'][()]
+            dos_total = h5file['results/electron_dos/dos'][0]
+            dos_partial = h5file['results/electron_dos/dospar'][0]
+            efermi = h5file['results/electron_dos/efermi'][()]
+            atom_species = h5file['results/positions/ion_types'][()]
+        
+        # Decode bytes to strings
+        atom_symbols = [s.decode('utf-8') if isinstance(s, bytes) else s for s in atom_species]
+        
+        # Shift energies so that EF = 0 eV
+        energies = energies - efermi
+        
+        # Identify unique elements
+        unique_elements = sorted(set(atom_symbols))
+        
+        # Convert to PDOS format: {element: {spin: [[energy, s, p, d, ...], ...]}}
+        pdos_files = {}
+        
+        for element in unique_elements:
+            atom_indices = [j for j, el in enumerate(atom_symbols) if el == element]
+            
+            # Sum PDOS for atoms of this element
+            pdos_element = np.sum(dos_partial[atom_indices, :, :], axis=0)  # shape: (n_orbitals, n_energies)
+            
+            # Extract orbital-resolved PDOS
+            pdos_s = pdos_element[0, :]                      # s (index 0)
+            pdos_p = np.sum(pdos_element[1:4, :], axis=0)    # p (1:4 → px, py, pz)
+            pdos_d = np.sum(pdos_element[4:9, :], axis=0)    # d (4:9 → dxy, dyz, dz2, dxz, dx2–y2)
+            
+            # Create data in same format as PDOS_*.dat files: [[energy, s, p, d], ...]
+            pdos_data = []
+            for i, e in enumerate(energies):
+                pdos_data.append([str(e), str(pdos_s[i]), str(pdos_p[i]), str(pdos_d[i])])
+            
+            pdos_files[element] = {'UP': pdos_data}
+        
+        # Store total DOS for TDOS plotting
+        tdos_data = []
+        for i, e in enumerate(energies):
+            tdos_data.append([str(e), str(dos_total[i])])
+        
+        return pdos_files, tdos_data
+        
+    except Exception as e:
+        print(f"Warning: Could not read from vaspout.h5: {e}")
+        return None, None
+
+def read_tdos_from_hdf5(location):
+    """Read total DOS from vaspout.h5 file"""
+    if not HAS_H5PY:
+        return None, None, None
+    
+    h5file_path = os.path.join(location, 'vaspout.h5')
+    if not os.path.isfile(h5file_path):
+        return None, None, None
+    
+    try:
+        with h5py.File(h5file_path, 'r') as h5file:
+            energies = h5file['results/electron_dos/energies'][()]
+            dos_total = h5file['results/electron_dos/dos'][0]
+            efermi = h5file['results/electron_dos/efermi'][()]
+        
+        # Shift energies so that EF = 0 eV
+        energies = energies - efermi
+        
+        # For HDF5, we have only total DOS (non-spin-polarized or averaged)
+        return energies, dos_total, dos_total
+        
+    except Exception as e:
+        print(f"Warning: Could not read TDOS from vaspout.h5: {e}")
         return None, None, None
 
 def plot_pdos(pdos_files, plotting_info, title, spin_filter=None, fill=False, location=None, fill_colors=None, cutoff=None, show_grid=False, show_ylabel=False):
@@ -414,8 +529,9 @@ def show_help():
    
 📁 SETUP:
    • Place this script in a directory containing VASP output files
-   • Required files: INCAR, DOSCAR, PROCAR (for auto-generation)
-   • PDOS_*.dat and TDOS.dat files (will be auto-generated if missing)
+   • Recommended: vaspout.h5 file (direct HDF5 output from VASP)
+   • Alternative: INCAR, DOSCAR, PROCAR files (for auto-generation via vaspkit)
+   • PDOS_*.dat and TDOS.dat files (auto-generated if HDF5 unavailable)
 
 📝 BASIC USAGE:
    Format: Element1 orbital1 orbital2, Element2 orbital3 orbital4
@@ -575,16 +691,29 @@ def main():
         print(f"Error: '{location}' is not a valid directory.")
         sys.exit(1)
     
-    # Try to read or generate PDOS files
-    pdos_files = read_pdos_files(location)
+    # Try to read PDOS files, with HDF5 as first priority
+    pdos_files = None
+    tdos_data = None
+    
+    # First, try to read from vaspout.h5
+    if HAS_H5PY:
+        pdos_files, tdos_data = read_pdos_from_hdf5(location)
+    
+    # Fall back to .dat files if HDF5 reading failed
     if not pdos_files:
-        generated = try_generate_pdos_dat_files(location)
-        if generated:
-            pdos_files = read_pdos_files(location)
+        print("No vaspout.h5 found or HDF5 reading failed. Trying to read PDOS .dat files...")
+        pdos_files = read_pdos_files(location)
+        if not pdos_files:
+            generated = try_generate_pdos_dat_files(location)
+            if generated:
+                pdos_files = read_pdos_files(location)
     
     if not pdos_files:
         print(f"Error: No PDOS files found in '{location}' and could not generate them.")
-        print("Required files: INCAR, DOSCAR, PROCAR")
+        if HAS_H5PY:
+            print("Required: vaspout.h5 file OR (INCAR, DOSCAR, PROCAR files)")
+        else:
+            print("Required files: INCAR, DOSCAR, PROCAR")
         sys.exit(1)
     
     last_dirs = os.path.normpath(location).split(os.sep)[-4:]
@@ -616,34 +745,60 @@ def main():
             all_orbitals = ['s', 'p', 'd']
             color_scheme = None
 
-            for token in tokens:
+            i = 0
+            while i < len(tokens):
+                token = tokens[i]
                 token_upper = token.upper()
+                token_lower = token.lower()
+                
                 if token_upper in ['UP', '--UP']:
                     spin_filter = 'UP'
+                    i += 1
                 elif token_upper in ['DOWN', '--DOWN', 'DW', '--DW']:
                     spin_filter = 'DOWN'
-                elif token.lower() in ['fill', '--fill', 'gridfill', '--gridfill']:
+                    i += 1
+                elif token_lower in ['fill', '--fill', 'gridfill', '--gridfill']:
                     fill = True
-                elif token.lower() in ['--colour', '--color', 'colour', 'color', '-c']:
-                    use_interactive_colors = True
+                    i += 1
+                elif token_lower in ['--grid', 'grid']:
+                    show_grid = True
+                    i += 1
+                elif token_lower in ['--colour', '--color', 'colour', 'color', '-c']:
+                    # Check if next token is a color scheme name
+                    if i + 1 < len(tokens):
+                        next_token = tokens[i + 1]
+                        if next_token.lower() in get_available_schemes():
+                            # It's a scheme name
+                            color_scheme = next_token.lower()
+                            i += 2  # Skip both --colour and scheme name
+                        else:
+                            # No scheme name provided, use interactive
+                            use_interactive_colors = True
+                            i += 1
+                    else:
+                        # No next token, use interactive
+                        use_interactive_colors = True
+                        i += 1
                 elif token.startswith('--cutoff'):
                     try:
-                        cutoff = float(token.split('=')[1] if '=' in token else tokens[tokens.index(token) + 1])
+                        if '=' in token:
+                            cutoff = float(token.split('=')[1])
+                        elif i + 1 < len(tokens):
+                            cutoff = float(tokens[i + 1])
+                            i += 1  # Skip the value token
+                        i += 1
                     except (IndexError, ValueError):
                         print("Invalid cutoff value. Ignoring.")
+                        i += 1
                 elif token.startswith('cutoff='):
                     try:
                         cutoff = float(token.split('=')[1])
                     except ValueError:
                         print("Invalid cutoff value. Ignoring.")
-                elif token.lower() in ['--grid', 'grid']:
-                    show_grid = True
-                elif token.lower() in ['-c', '--colour', '--color'] and tokens.index(token) + 1 < len(tokens):
-                    next_token = tokens[tokens.index(token) + 1]
-                    if next_token.lower() in get_available_schemes():
-                        color_scheme = next_token.lower()
+                    i += 1
                 else:
                     filtered_tokens.append(token)
+                    i += 1
 
             # Process 'all' keyword
             if filtered_tokens and filtered_tokens[0].lower() == 'all':
