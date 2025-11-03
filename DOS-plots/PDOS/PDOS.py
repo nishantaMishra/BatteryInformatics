@@ -33,7 +33,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import matplotlib.font_manager as fm
 
-# Add this near the top after imports
+# supress the warmings
 desired_fonts = ['Noto Sans Devanagari', 'DejaVu Sans']
 installed_font_names = {f.name.lower() for f in fm.fontManager.ttflist}
 valid_fonts = [f for f in desired_fonts if f.lower() in installed_font_names]
