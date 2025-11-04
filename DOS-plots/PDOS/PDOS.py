@@ -1,4 +1,4 @@
-# Working as intended on Sun Aug 17 06:43:49 PM EDT 2025
+# Working as intended on Mon Nov  3 09:29:20 PM EST 2025
 # The program expects vaspkit installed in the system.
 
 #------------ Dependency check ----------
@@ -25,7 +25,7 @@ dependencies = {
     "matplotlib": "matplotlib",
     "numpy": "numpy",
     "yaml": "pyyaml",  # Module name: package name
-    "h5py": "h5py"  # Optional: for HDF5 file support
+    "h5py": "h5py"  # for HDF5 file support
 }
 
 for module_name, package_name in dependencies.items():
