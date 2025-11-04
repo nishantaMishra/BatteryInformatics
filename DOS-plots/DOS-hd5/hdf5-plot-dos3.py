@@ -1,4 +1,4 @@
-# Plot for each element and each orbital
+# Plot for each element and each orbital. TDOS is good but PDOS is problematic.
 
 import h5py
 import matplotlib.pyplot as plt
