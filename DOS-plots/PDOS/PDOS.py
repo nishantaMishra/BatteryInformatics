@@ -288,13 +288,51 @@ def read_pdos_from_hdf5(location):
         with h5py.File(h5file_path, 'r') as h5file:
             # Read energies and Fermi level
             energies = h5file['results/electron_dos/energies'][()]
-            dos_total = h5file['results/electron_dos/dos'][0]
-            dos_partial = h5file['results/electron_dos/dospar'][0]
             efermi = h5file['results/electron_dos/efermi'][()]
-            atom_species = h5file['results/positions/ion_types'][()]
-        
-        # Decode bytes to strings
-        atom_symbols = [s.decode('utf-8') if isinstance(s, bytes) else s for s in atom_species]
+            
+            # Read DOS data
+            dos_data = h5file['results/electron_dos/dos'][()]
+            # Sum over spin dimension if present
+            if dos_data.ndim > 1:
+                dos_total = np.sum(dos_data, axis=0)
+            else:
+                dos_total = dos_data
+            
+            # Read partial DOS: (nspin, natoms, norb, nE) or (natoms, norb, nE)
+            dospar = h5file['results/electron_dos/dospar'][()]
+            
+            # Handle spin dimension
+            if dospar.ndim == 4:
+                nspin, natoms, norb, nE = dospar.shape
+                # Sum over spin dimension
+                dospar = np.sum(dospar, axis=0)  # (natoms, norb, nE)
+            else:
+                natoms, norb, nE = dospar.shape
+            
+            # --- Build per-atom element list ---
+            pos_grp = h5file['results/positions']
+            ion_types_bytes = pos_grp['ion_types'][()]  # one name per *type*
+            
+            # Get number of ions of each type
+            if 'number_ion_types' in pos_grp:
+                n_per_type = pos_grp['number_ion_types'][()]
+            else:
+                # Fallback: assume ion_types is already per atom
+                n_per_type = np.ones_like(ion_types_bytes, dtype=int)
+            
+            # Build per-atom element list
+            ion_types = [s.decode('utf-8') if isinstance(s, bytes) else str(s) for s in ion_types_bytes]
+            atom_symbols = []
+            for sym, n in zip(ion_types, n_per_type):
+                atom_symbols.extend([sym] * int(n))
+            atom_symbols = np.array(atom_symbols)
+            
+            # Sanity check
+            if natoms != len(atom_symbols):
+                print(f"Warning: Mismatch between dospar atoms ({natoms}) and built symbols ({len(atom_symbols)})")
+                # Try alternative: assume ion_types is already per-atom
+                atom_symbols = np.array([s.decode('utf-8') if isinstance(s, bytes) else str(s) 
+                                        for s in ion_types_bytes[:natoms]])
         
         # Shift energies so that EF = 0 eV
         energies = energies - efermi
@@ -302,24 +340,59 @@ def read_pdos_from_hdf5(location):
         # Identify unique elements
         unique_elements = sorted(set(atom_symbols))
         
-        # Convert to PDOS format: {element: {spin: [[energy, s, p, d, ...], ...]}}
+        # Convert to PDOS format: {element: {spin: [[energy, s, py, pz, px, dxy, dyz, dz2, dxz, dx2, tot], ...]}}
         pdos_files = {}
         
         for element in unique_elements:
-            atom_indices = [j for j, el in enumerate(atom_symbols) if el == element]
+            # Get indices of atoms of this element
+            atom_indices = np.where(atom_symbols == element)[0]
             
-            # Sum PDOS for atoms of this element
-            pdos_element = np.sum(dos_partial[atom_indices, :, :], axis=0)  # shape: (n_orbitals, n_energies)
+            # Sum PDOS over all atoms of this element: (norb, nE)
+            pdos_element = np.sum(dospar[atom_indices, :, :], axis=0)
             
-            # Extract orbital-resolved PDOS
-            pdos_s = pdos_element[0, :]                      # s (index 0)
-            pdos_p = np.sum(pdos_element[1:4, :], axis=0)    # p (1:4 → px, py, pz)
-            pdos_d = np.sum(pdos_element[4:9, :], axis=0)    # d (4:9 → dxy, dyz, dz2, dxz, dx2–y2)
+            # Extract orbital-resolved PDOS assuming VASP order:
+            # 0: s
+            # 1-3: px, py, pz
+            # 4-8: dxy, dyz, dz2, dxz, dx2-y2
+            pdos_s = pdos_element[0, :]
             
-            # Create data in same format as PDOS_*.dat files: [[energy, s, p, d], ...]
+            # Individual p orbitals
+            if norb >= 4:
+                pdos_py = pdos_element[1, :]  # Note: VASP order may be px, py, pz
+                pdos_pz = pdos_element[2, :]
+                pdos_px = pdos_element[3, :]
+            else:
+                pdos_py = pdos_pz = pdos_px = np.zeros_like(pdos_s)
+            
+            # Individual d orbitals
+            if norb >= 9:
+                pdos_dxy = pdos_element[4, :]
+                pdos_dyz = pdos_element[5, :]
+                pdos_dz2 = pdos_element[6, :]
+                pdos_dxz = pdos_element[7, :]
+                pdos_dx2 = pdos_element[8, :]
+            else:
+                pdos_dxy = pdos_dyz = pdos_dz2 = pdos_dxz = pdos_dx2 = np.zeros_like(pdos_s)
+            
+            # Calculate total for this element
+            pdos_tot = pdos_s + pdos_py + pdos_pz + pdos_px + pdos_dxy + pdos_dyz + pdos_dz2 + pdos_dxz + pdos_dx2
+            
+            # Create data in format expected by plot_pdos: [[energy, s, py, pz, px, dxy, dyz, dz2, dxz, dx2, tot], ...]
             pdos_data = []
             for i, e in enumerate(energies):
-                pdos_data.append([str(e), str(pdos_s[i]), str(pdos_p[i]), str(pdos_d[i])])
+                pdos_data.append([
+                    str(e),
+                    str(pdos_s[i]),
+                    str(pdos_py[i]),
+                    str(pdos_pz[i]),
+                    str(pdos_px[i]),
+                    str(pdos_dxy[i]),
+                    str(pdos_dyz[i]),
+                    str(pdos_dz2[i]),
+                    str(pdos_dxz[i]),
+                    str(pdos_dx2[i]),
+                    str(pdos_tot[i])
+                ])
             
             pdos_files[element] = {'UP': pdos_data}
         
@@ -328,10 +401,13 @@ def read_pdos_from_hdf5(location):
         for i, e in enumerate(energies):
             tdos_data.append([str(e), str(dos_total[i])])
         
+        print(f"Successfully read PDOS data for elements: {', '.join(unique_elements)}")
         return pdos_files, tdos_data
         
     except Exception as e:
         print(f"Warning: Could not read from vaspout.h5: {e}")
+        import traceback
+        traceback.print_exc()
         return None, None
 
 def read_tdos_from_hdf5(location):
@@ -346,13 +422,19 @@ def read_tdos_from_hdf5(location):
     try:
         with h5py.File(h5file_path, 'r') as h5file:
             energies = h5file['results/electron_dos/energies'][()]
-            dos_total = h5file['results/electron_dos/dos'][0]
+            dos_data = h5file['results/electron_dos/dos'][()]
             efermi = h5file['results/electron_dos/efermi'][()]
+        
+        # Sum over spin dimension if present
+        if dos_data.ndim > 1:
+            dos_total = np.sum(dos_data, axis=0)
+        else:
+            dos_total = dos_data
         
         # Shift energies so that EF = 0 eV
         energies = energies - efermi
         
-        # For HDF5, we have only total DOS (non-spin-polarized or averaged)
+        # For HDF5, return summed total DOS for both up and down
         return energies, dos_total, dos_total
         
     except Exception as e:
