@@ -934,7 +934,11 @@ def main():
 
             # Apply color scheme if specified
             if color_scheme and not use_interactive_colors:
-                scheme_colors = apply_color_scheme(list(pdos_files.keys()), plotting_info, color_scheme)
+                # Include 'tot' in the elements list so color schemes can assign a TDOS color
+                elements_for_scheme = list(pdos_files.keys())
+                if 'tot' in plotting_info:
+                    elements_for_scheme = elements_for_scheme + ['tot']
+                scheme_colors = apply_color_scheme(elements_for_scheme, plotting_info, color_scheme)
                 for elem, color in scheme_colors.items():
                     if elem not in fill_colors:  # Don't override inline colors
                         fill_colors[elem] = color
