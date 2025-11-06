@@ -160,7 +160,7 @@ def analyze_tdos_bandgap(energy, tdos_up, tdos_down, symmetry_tol=0.01):
 # Import color manager
 try:
     import sys
-    sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+    sys.path.append(os.path.dirname(__file__))  # Update to current directory
     from color_manager import apply_color_scheme, get_available_schemes, list_schemes_info
 except ImportError:
     print("Warning: Could not import color manager. Color schemes may not work properly.")
