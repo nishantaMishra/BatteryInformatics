@@ -27,3 +27,6 @@ The program will try to install all the required packages if not already install
 
 ## TODO:
 - Independence from vaspkit to generate .dat files.
+
+Known Issues:
+- Vaspouth5 cannot plot downspin.

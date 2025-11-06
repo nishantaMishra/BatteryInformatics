@@ -575,22 +575,23 @@ def get_fill_colors(elements, plotting_info):
     print()
     
     for element in elements:
-        if element in plotting_info:  # Only ask for elements that will be plotted
+        if element in plotting_info:  # Only ask for items that will be plotted (elements and 'tot')
+            display_element = 'TDOS' if str(element).lower() in ('tot', 'tdos') else element
             while True:
-                color_input = input(f"Choose fill color for {element} (Enter for default): ").strip().lower()
+                color_input = input(f"Choose fill color for {display_element} (Enter for default): ").strip().lower()
                 
                 if not color_input:  # User pressed Enter - use default
                     break
                 elif color_input in available_colors:
                     fill_colors[element] = color_input
-                    print(f"✓ {element} will use {color_input}")
+                    print(f"✓ {display_element} will use {color_input}")
                     break
                 elif color_input.startswith('#') and len(color_input) == 7:
                     # Validate hex color
                     try:
                         int(color_input[1:], 16)  # Check if it's valid hex
                         fill_colors[element] = color_input
-                        print(f"✓ {element} will use {color_input}")
+                        print(f"✓ {display_element} will use {color_input}")
                         break
                     except ValueError:
                         print("Invalid hex color. Try again or press Enter for default.")
@@ -940,7 +941,12 @@ def main():
 
             # Interactive color selection
             if use_interactive_colors and not color_scheme:
-                fill_colors.update(get_fill_colors(list(pdos_files.keys()), plotting_info))
+                # Include TDOS ('tot') in the interactive list so the user can pick a color for it
+                elements_for_colors = list(pdos_files.keys())
+                if 'tot' in plotting_info:
+                    # append 'tot' so get_fill_colors will prompt for TDOS color
+                    elements_for_colors = elements_for_colors + ['tot']
+                fill_colors.update(get_fill_colors(elements_for_colors, plotting_info))
 
             if plotting_info:
                 plot_pdos(pdos_files, plotting_info, title, spin_filter, fill, location, fill_colors, cutoff, show_grid)

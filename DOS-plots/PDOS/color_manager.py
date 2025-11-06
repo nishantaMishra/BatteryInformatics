@@ -106,13 +106,27 @@ def apply_color_scheme(elements, plotting_info, scheme_name):
     print(f"\n=== {scheme_name.upper()} Color Scheme Applied ===")
     
     for element in elements:
-        if element in plotting_info and element != 'tot':  # Skip TDOS
-            element_symbol = element.capitalize()
-            if element_symbol in scheme_colors:
-                fill_colors[element] = scheme_colors[element_symbol]
-                print(f"✓ {element} assigned {scheme_name.upper()} color: {scheme_colors[element_symbol]}")
+        # Allow color assignment for TDOS as well as elements
+        if element in plotting_info:
+            if element == 'tot':
+                # Try multiple possible keys for TDOS in the YAML: 'TDOS', 'Tot', 'tot'
+                tkeys = ['TDOS', 'Tot', 'tdos', 'tot']
+                assigned = False
+                for k in tkeys:
+                    if k in scheme_colors:
+                        fill_colors[element] = scheme_colors[k]
+                        print(f"✓ TDOS assigned {scheme_name.upper()} color: {scheme_colors[k]}")
+                        assigned = True
+                        break
+                if not assigned:
+                    print(f"⚠ TDOS not found in {scheme_name.upper()} scheme, using default color")
             else:
-                print(f"⚠ {element} not found in {scheme_name.upper()} scheme, using default color")
+                element_symbol = element.capitalize()
+                if element_symbol in scheme_colors:
+                    fill_colors[element] = scheme_colors[element_symbol]
+                    print(f"✓ {element} assigned {scheme_name.upper()} color: {scheme_colors[element_symbol]}")
+                else:
+                    print(f"⚠ {element} not found in {scheme_name.upper()} scheme, using default color")
     
     return fill_colors
 

@@ -108,6 +108,7 @@ Jmol:
   Yb: [0, 191, 56]
   Zn: [125, 128, 176]
   Zr: [148, 224, 224]
+  TDOS: [128, 128, 128]
 VESTA:
   Ac: [112, 171, 250]
   Ag: [192, 192, 192]
@@ -218,6 +219,7 @@ VESTA:
   Yb: [0, 191, 56]
   Zn: [143, 143, 129]
   Zr: [0, 255, 0]
+  TDOS: [128, 128, 128]
 User:  # Customizable color scheme - modify these colors as needed
   H: [255, 204, 204]    # Pinkish White
   He: [255, 192, 203]   # Pink
@@ -322,6 +324,7 @@ User:  # Customizable color scheme - modify these colors as needed
   Md: [255, 105, 180]   # Hot Pink
   'No': [255, 182, 193] # Light Pink
   Lr: [255, 192, 203]   # Pink
+  TDOS: [128, 128, 128]
 CPK:  # Classic Corey-Pauling-Koltun chemistry colors from 1960s
   H: [255, 255, 255]    # White
   C: [0, 0, 0]          # Black
@@ -360,6 +363,7 @@ CPK:  # Classic Corey-Pauling-Koltun chemistry colors from 1960s
   Au: [218, 165, 32]    # Goldenrod
   Hg: [128, 128, 128]   # Gray
   Pb: [128, 128, 128]   # Gray
+  TDOS: [128, 128, 128]
 MP:  # Materials Project database colors for computational materials science
   H: [255, 255, 255]    # White
   He: [255, 192, 203]   # Pink
@@ -440,6 +444,7 @@ MP:  # Materials Project database colors for computational materials science
   Ir: [240, 230, 140]   # Khaki
   Pt: [34, 139, 34]     # Forest Green
   Au: [255, 215, 0]     # Gold
+  TDOS: [128, 128, 128]
   Hg: [128, 128, 128]   # Gray
   Tl: [255, 165, 0]     # Orange
   Pb: [128, 128, 128]   # Gray
